@@ -1,0 +1,4 @@
+# Package-specific gitignore
+.idea/
+.vscode/
+*.DS_Store

@@ -1,0 +1,31 @@
+{
+  "name": "BovineLabs.Timeline.Grid.Influence.Editor",
+  "rootNamespace": "",
+  "references": [
+    "BovineLabs.Core",
+    "BovineLabs.Core.Editor",
+    "BovineLabs.Core.Extensions",
+    "BovineLabs.Core.Extensions.Editor",
+    "BovineLabs.Reaction.Data",
+    "BovineLabs.Timeline.Authoring",
+    "BovineLabs.Timeline.Grid.Influence",
+    "BovineLabs.Timeline.Grid.Influence.Authoring",
+    "BovineLabs.Timeline.Grid.Influence.Data",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Mathematics",
+    "Unity.Transforms"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

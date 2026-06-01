@@ -10,12 +10,13 @@ using static Unity.Burst.Intrinsics.X86;
 
 namespace BovineLabs.Timeline.Grid.Influence
 {
+    [BurstCompile]
     public unsafe struct InfluenceField : INativeDisposable
     {
         NativeParallelHashMap<int2, int> _index;
         NativeList<ChunkSlot> _slots;
-        NativeList<int> _activeChunks; // Tracks which chunks were touched this frame
-        
+        NativeList<int> _activeChunks;
+
         int _chunkSize;
         int _log2;
         int _stride;
@@ -23,21 +24,19 @@ namespace BovineLabs.Timeline.Grid.Influence
         uint _frameId;
         AllocatorManager.AllocatorHandle _allocator;
 
-        internal struct ChunkSlot
+        private struct ChunkSlot
         {
             public int2 Coord;
-            [NativeDisableUnsafePtrRestriction] 
-            public int* Field;
+            [NativeDisableUnsafePtrRestriction] public int* Field;
             public uint LastWrittenFrame;
         }
 
         public static InfluenceField Create(int chunkSizePowerOfTwo, AllocatorManager.AllocatorHandle allocator)
         {
-            // HARDWARE GEM: Trailing zero count replaces the while loop for O(1) Log2
             int log2 = math.tzcnt(chunkSizePowerOfTwo);
             int dimension = chunkSizePowerOfTwo + 1;
-            int stride = (dimension + 7) & ~7; // 32-byte aligned for AVX2
-            
+            int stride = (dimension + 7) & ~7;
+
             return new InfluenceField
             {
                 _index = new NativeParallelHashMap<int2, int>(64, allocator),
@@ -52,10 +51,6 @@ namespace BovineLabs.Timeline.Grid.Influence
             };
         }
 
-        /// <summary>
-        /// Schedules the influence map generation across worker threads using Difference Arrays.
-        /// Call this once per frame for mass-unit updates.
-        /// </summary>
         public JobHandle ScheduleBatched(NativeArray<Stamp> stamps, JobHandle dependsOn = default)
         {
             for (int i = 0; i < stamps.Length; i++)
@@ -94,19 +89,14 @@ namespace BovineLabs.Timeline.Grid.Influence
             return rects.Dispose(resolveHandle);
         }
 
-        /// <summary>
-        /// Instantly adds a stamp directly to the resolved grid.
-        /// Use this ONLY for single events (like an explosion) after the batched resolve has completed.
-        /// </summary>
         public void AddImmediate(Stamp stamp)
         {
             EnsureBounds(Rasterizer.Bounds(stamp.Shape, stamp.Origin));
             NativeList<WorldRect> rects = new NativeList<WorldRect>(64, Allocator.Temp);
             Rasterizer.Emit(stamp, ref rects);
-            
-            for (int i = 0; i < rects.Length; i++) 
-                BroadcastRect(rects[i]);
-                
+
+            for (int i = 0; i < rects.Length; i++) BroadcastRect(rects[i]);
+
             rects.Dispose();
         }
 
@@ -116,20 +106,19 @@ namespace BovineLabs.Timeline.Grid.Influence
         {
             int2 coord = new int2(cell.x >> _log2, cell.y >> _log2);
             if (!_index.TryGetValue(coord, out int slot)) return 0;
-            
+
             int baseX = coord.x << _log2;
             int baseY = coord.y << _log2;
-            int* field = _slots[slot].Field;
-            
+
             if (_slots[slot].LastWrittenFrame != _frameId) return 0;
-            
+
+            int* field = _slots[slot].Field;
             return field[(cell.y - baseY) * _stride + (cell.x - baseX)];
         }
 
         public ChunkView GetChunkView(int2 coord)
         {
-            if (!_index.TryGetValue(coord, out int slot) || _slots[slot].LastWrittenFrame != _frameId)
-                return default;
+            if (!_index.TryGetValue(coord, out int slot) || _slots[slot].LastWrittenFrame != _frameId) return default;
 
             return new ChunkView
             {
@@ -145,11 +134,13 @@ namespace BovineLabs.Timeline.Grid.Influence
             {
                 for (int i = 0; i < _slots.Length; i++)
                 {
-                    if (_slots[i].Field != null) 
+                    if (_slots[i].Field != null)
                         AllocatorManager.Free(_allocator, _slots[i].Field);
                 }
+
                 _slots.Dispose();
             }
+
             if (_activeChunks.IsCreated) _activeChunks.Dispose();
             if (_index.IsCreated) _index.Dispose();
         }
@@ -163,13 +154,13 @@ namespace BovineLabs.Timeline.Grid.Influence
         int EnsureSlot(int2 coord)
         {
             if (_index.TryGetValue(coord, out int existing)) return existing;
-            
+
             int items = _stride * _dimension;
             long bytes = (long)items * sizeof(int);
-            
+
             int* ptr = (int*)AllocatorManager.Allocate(_allocator, sizeof(int), 32, items);
             UnsafeUtility.MemClear(ptr, bytes);
-            
+
             int index = _slots.Length;
             _slots.Add(new ChunkSlot { Coord = coord, Field = ptr, LastWrittenFrame = 0 });
             _index.Add(coord, index);
@@ -183,15 +174,12 @@ namespace BovineLabs.Timeline.Grid.Influence
             int cy0 = bounds.Min.y >> _log2;
             int cx1 = (bounds.Max.x - 1) >> _log2;
             int cy1 = (bounds.Max.y - 1) >> _log2;
-            
+
             for (int cy = cy0; cy <= cy1; cy++)
-                for (int cx = cx0; cx <= cx1; cx++)
-                    EnsureSlot(new int2(cx, cy));
+            for (int cx = cx0; cx <= cx1; cx++)
+                EnsureSlot(new int2(cx, cy));
         }
 
-        /// <summary>
-        /// The dense write path used ONLY for Immediate updates to an already resolved grid.
-        /// </summary>
         void BroadcastRect(WorldRect rect)
         {
             AlignedRect bounds = rect.Bounds;
@@ -202,16 +190,20 @@ namespace BovineLabs.Timeline.Grid.Influence
             int cx1 = (bounds.Max.x - 1) >> _log2;
             int cy1 = (bounds.Max.y - 1) >> _log2;
             bool avx2 = Avx2.IsAvx2Supported;
+            long chunkBytes = (long)_stride * _dimension * sizeof(int);
 
             for (int cy = cy0; cy <= cy1; cy++)
             for (int cx = cx0; cx <= cx1; cx++)
             {
                 if (!_index.TryGetValue(new int2(cx, cy), out int slotIdx)) continue;
-                
-                // If the chunk isn't active this frame, we shouldn't dense write into old garbage
+
                 ChunkSlot* slotPtr = (ChunkSlot*)_slots.GetUnsafePtr() + slotIdx;
-                if (slotPtr->LastWrittenFrame != _frameId) continue; 
-                
+                if (slotPtr->LastWrittenFrame != _frameId)
+                {
+                    UnsafeUtility.MemClear(slotPtr->Field, chunkBytes);
+                    slotPtr->LastWrittenFrame = _frameId;
+                }
+
                 int baseX = cx << _log2;
                 int baseY = cy << _log2;
                 int lx0 = math.max(bounds.Min.x, baseX) - baseX;
@@ -232,14 +224,13 @@ namespace BovineLabs.Timeline.Grid.Influence
                         for (; x <= count - 8; x += 8)
                             Avx.mm256_storeu_si256(row + x, Avx2.mm256_add_epi32(Avx.mm256_loadu_si256(row + x), wide));
                     }
+
                     for (; x < count; x++) row[x] += weight;
                 }
             }
         }
 
-        // --- JOBS ---
-
-        [BurstCompile(FloatMode = FloatMode.Fast, OptimizeFor = OptimizeFor.Performance)]
+        [BurstCompile(FloatMode = FloatMode.Deterministic, OptimizeFor = OptimizeFor.Performance)]
         struct RasterizeJob : IJob
         {
             [ReadOnly] public NativeArray<Stamp> Stamps;
@@ -247,20 +238,20 @@ namespace BovineLabs.Timeline.Grid.Influence
 
             public void Execute()
             {
-                for (int i = 0; i < Stamps.Length; i++) 
+                for (int i = 0; i < Stamps.Length; i++)
                     Rasterizer.Emit(Stamps[i], ref Rects);
             }
         }
 
-        [BurstCompile(FloatMode = FloatMode.Fast, OptimizeFor = OptimizeFor.Performance)]
+        [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
         struct ScatterJob : IJob
         {
             [ReadOnly] public NativeArray<WorldRect> Rects;
             [ReadOnly] public NativeParallelHashMap<int2, int> Index;
-            
+
             public NativeList<ChunkSlot> Slots;
             public NativeList<int> ActiveChunks;
-            
+
             public int ChunkSize;
             public int Log2;
             public int Stride;
@@ -274,7 +265,7 @@ namespace BovineLabs.Timeline.Grid.Influence
                 {
                     AlignedRect bounds = Rects[i].Bounds;
                     int weight = Rects[i].Weight;
-                    
+
                     int cx0 = bounds.Min.x >> Log2;
                     int cy0 = bounds.Min.y >> Log2;
                     int cx1 = (bounds.Max.x - 1) >> Log2;
@@ -284,14 +275,14 @@ namespace BovineLabs.Timeline.Grid.Influence
                     for (int cx = cx0; cx <= cx1; cx++)
                     {
                         if (!Index.TryGetValue(new int2(cx, cy), out int slotIdx)) continue;
-                        
+
                         int baseX = cx << Log2;
                         int baseY = cy << Log2;
                         int lx0 = math.max(bounds.Min.x, baseX) - baseX;
                         int ly0 = math.max(bounds.Min.y, baseY) - baseY;
                         int lx1 = math.min(bounds.Max.x, baseX + ChunkSize) - baseX;
                         int ly1 = math.min(bounds.Max.y, baseY + ChunkSize) - baseY;
-                        
+
                         if (lx0 >= lx1 || ly0 >= ly1) continue;
 
                         ChunkSlot* slotPtr = (ChunkSlot*)Slots.GetUnsafePtr() + slotIdx;
@@ -312,7 +303,7 @@ namespace BovineLabs.Timeline.Grid.Influence
             }
         }
 
-        [BurstCompile(FloatMode = FloatMode.Fast, OptimizeFor = OptimizeFor.Performance)]
+        [BurstCompile(OptimizeFor = OptimizeFor.Performance)]
         struct ResolveJob : IJobParallelForDefer
         {
             [ReadOnly] public NativeArray<ChunkSlot> Slots;
@@ -327,11 +318,11 @@ namespace BovineLabs.Timeline.Grid.Influence
             }
         }
     }
-
+    
+    [BurstCompile]
     public unsafe struct ChunkView
     {
-        [NativeDisableUnsafePtrRestriction] 
-        public int* Field;
+        [NativeDisableUnsafePtrRestriction] public int* Field;
         public int2 Base;
         public int Stride;
 

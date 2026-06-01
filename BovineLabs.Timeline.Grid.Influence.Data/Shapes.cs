@@ -1,3 +1,4 @@
+using Unity.Burst;
 using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data
@@ -10,7 +11,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         Annulus,
         Capsule
     }
-
+    
+    [BurstCompile]
     public readonly struct InfluenceShape
     {
         public readonly ShapeKind Kind;
@@ -67,6 +69,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             => new InfluenceShape(ShapeKind.Capsule, weight, a, b, radius, 0);
     }
 
+    [BurstCompile]
     public readonly struct Stamp
     {
         public readonly InfluenceShape Shape;

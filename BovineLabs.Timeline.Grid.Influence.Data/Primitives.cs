@@ -1,6 +1,6 @@
 using Unity.Mathematics;
 
-namespace Influence
+namespace BovineLabs.Timeline.Grid.Influence
 {
     public readonly struct AlignedRect
     {
@@ -37,13 +37,6 @@ namespace Influence
             while ((long)(root + 1) * (root + 1) <= value) root++;
             while ((long)root * root > value) root--;
             return root;
-        }
-
-        public static int FloorLog2PowerOfTwo(int powerOfTwo)
-        {
-            int log = 0;
-            while ((1 << log) < powerOfTwo) log++;
-            return log;
         }
     }
 }

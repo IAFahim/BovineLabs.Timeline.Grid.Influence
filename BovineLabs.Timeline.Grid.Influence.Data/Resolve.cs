@@ -1,8 +1,10 @@
+using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using static Unity.Burst.Intrinsics.X86;
 
-namespace Influence
+namespace BovineLabs.Timeline.Grid.Influence.Data
 {
+    [BurstCompile(FloatMode = FloatMode.Fast, OptimizeFor = OptimizeFor.Performance)]
     public static unsafe class PrefixSumResolve
     {
         public static void Run(int* field, int stride, int dimension)
@@ -33,6 +35,7 @@ namespace Influence
                 int* above = field + (y - 1) * stride;
                 int* current = field + y * stride;
                 int x = 0;
+                
                 if (avx2)
                 {
                     for (; x <= stride - 8; x += 8)
@@ -42,7 +45,9 @@ namespace Influence
                         Avx.mm256_storeu_si256(current + x, Avx2.mm256_add_epi32(c, a));
                     }
                 }
-                for (; x < dimension; x++) current[x] += above[x];
+
+                for (; x < dimension; x++) 
+                    current[x] += above[x];
             }
         }
     }

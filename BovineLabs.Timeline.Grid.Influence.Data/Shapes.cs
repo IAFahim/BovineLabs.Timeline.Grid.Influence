@@ -1,6 +1,6 @@
 using Unity.Mathematics;
 
-namespace Influence
+namespace BovineLabs.Timeline.Grid.Influence.Data
 {
     public enum ShapeKind : byte
     {

@@ -1,8 +1,10 @@
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
 
-namespace Influence
+namespace BovineLabs.Timeline.Grid.Influence.Data
 {
+    [BurstCompile(FloatMode = FloatMode.Fast, OptimizeFor = OptimizeFor.Performance)]
     public static class Rasterizer
     {
         public static AlignedRect Bounds(InfluenceShape shape, int2 origin)

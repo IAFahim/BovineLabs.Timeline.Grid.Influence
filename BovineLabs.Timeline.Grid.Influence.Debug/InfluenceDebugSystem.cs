@@ -1,21 +1,19 @@
 #if UNITY_EDITOR || BL_DEBUG
-
+using BovineLabs.Core;
+using BovineLabs.Core.ConfigVars;
+using BovineLabs.Quill;
+using BovineLabs.Timeline.Core.Debug;
+using BovineLabs.Timeline.Data;
+using BovineLabs.Timeline.Grid.Influence.Data;
+using Unity.Burst;
+using Unity.Collections;
+using Unity.Entities;
+using Unity.Mathematics;
+using Unity.Transforms;
+using UnityEngine;
 
 namespace BovineLabs.Timeline.Grid.Influence.Debug
 {
-    using BovineLabs.Core;
-    using BovineLabs.Core.ConfigVars;
-    using BovineLabs.Quill;
-    using BovineLabs.Timeline.Core.Debug;
-    using BovineLabs.Timeline.Data;
-    using BovineLabs.Timeline.Grid.Influence.Data;
-    using Unity.Burst;
-    using Unity.Collections;
-    using Unity.Entities;
-    using Unity.Mathematics;
-    using Unity.Transforms;
-    using UnityEngine;
-
     [Configurable]
     public static class InfluenceDebugSystemConfig
     {
@@ -28,15 +26,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         [ConfigVar("influencegizmo.negative-color", 0.9f, 0.2f, 0.2f, 0.8f, "Color for negative influence (Red)")]
         public static readonly SharedStatic<Color> NegativeColor = SharedStatic<Color>.GetOrCreate<Tags.NegativeColor>();
 
-        [ConfigVar("influencegizmo.cell-size", 1f, "Size of a single grid cell in world units.")]
-        public static readonly SharedStatic<float> CellSize = SharedStatic<float>.GetOrCreate<Tags.CellSize>();
-
         private struct Tags
         {
             public struct Enabled { }
             public struct PositiveColor { }
             public struct NegativeColor { }
-            public struct CellSize { }
         }
     }
 
@@ -51,6 +45,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<DrawSystem.Singleton>();
+            state.RequireForUpdate<InfluenceGridSettings>();
+            
             _query = SystemAPI.QueryBuilder()
                 .WithAll<TrackBinding, InfluenceClipData, ClipActive>()
                 .Build();
@@ -64,12 +60,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                   ref state, InfluenceDebugSystemConfig.Enabled.Data, out var drawer))
                 return;
 
+            var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
+
             state.Dependency = new DrawJob
             {
                 Drawer        = drawer,
                 PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
                 NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
-                CellSize      = InfluenceDebugSystemConfig.CellSize.Data,
+                CellSize      = settings.CellSize,
+                Basis         = new GridBasis(settings.PlaneNormal),
                 LtwLookup     = SystemAPI.GetComponentLookup<LocalToWorld>(true),
                 LocalTransformLookup = SystemAPI.GetComponentLookup<LocalTransform>(true),
                 ParentLookup = SystemAPI.GetComponentLookup<Parent>(true)
@@ -83,6 +82,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             public Color PositiveColor;
             public Color NegativeColor;
             public float CellSize;
+            public GridBasis Basis;
+
             [ReadOnly] public ComponentLookup<LocalToWorld> LtwLookup;
             [ReadOnly] public ComponentLookup<LocalTransform> LocalTransformLookup;
             [ReadOnly] public ComponentLookup<Parent> ParentLookup;
@@ -106,98 +107,90 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
                 var origin = GetAntiJitterPosition(binding.Value, ltw.Position) + math.rotate(ltw.Rotation, active.LocalOffset);
 
+                // Preserve height offset relative to the normal
+                var heightOffset = math.dot(origin, Basis.Normal);
+                var projectedPos = Basis.ToGridSpace(origin);
 
                 var gridOrigin = new int2(
-                    (int)math.floor(origin.x / CellSize),
-                    (int)math.floor(origin.z / CellSize)
+                    (int)math.floor(projectedPos.x / CellSize),
+                    (int)math.floor(projectedPos.y / CellSize)
                 );
 
-                var snappedOrigin = new float3(
+                var snappedGridPos = new float2(
                     gridOrigin.x * CellSize + CellSize * 0.5f,
-                    origin.y,
                     gridOrigin.y * CellSize + CellSize * 0.5f);
+
+                var snappedWorldOrigin = Basis.ToWorldSpace(snappedGridPos, heightOffset);
 
                 switch (shape.Kind)
                 {
                     case ShapeKind.SolidRect:
-                    {
-                        DrawRect(snappedOrigin, shape.RectMin, shape.RectSize, color);
+                        DrawRect(snappedWorldOrigin, shape.RectMin, shape.RectSize, color, heightOffset);
                         break;
-                    }
                     case ShapeKind.RectShell:
-                    {
-                        DrawRect(snappedOrigin, shape.ShellMin, shape.ShellSize, color);
+                        DrawRect(snappedWorldOrigin, shape.ShellMin, shape.ShellSize, color, heightOffset);
                         var innerMin = shape.ShellMin + new int2(shape.ShellThickness);
                         var innerSize = shape.ShellSize - new int2(shape.ShellThickness * 2);
-                        DrawRect(snappedOrigin, innerMin, innerSize, color);
+                        DrawRect(snappedWorldOrigin, innerMin, innerSize, color, heightOffset);
                         break;
-                    }
                     case ShapeKind.Disc:
-                    {
-                        DrawDisc(snappedOrigin, shape.DiscCenter, shape.DiscRadius, color);
+                        DrawDisc(snappedWorldOrigin, shape.DiscCenter, shape.DiscRadius, color, heightOffset);
                         break;
-                    }
                     case ShapeKind.Annulus:
-                    {
-                        DrawDisc(snappedOrigin, shape.AnnulusCenter, shape.AnnulusOuter, color);
+                        DrawDisc(snappedWorldOrigin, shape.AnnulusCenter, shape.AnnulusOuter, color, heightOffset);
                         if (shape.AnnulusInner >= 0)
-                            DrawDisc(snappedOrigin, shape.AnnulusCenter, shape.AnnulusInner, color);
+                            DrawDisc(snappedWorldOrigin, shape.AnnulusCenter, shape.AnnulusInner, color, heightOffset);
                         break;
-                    }
                     case ShapeKind.Capsule:
-                    {
-                        DrawCapsule(snappedOrigin, shape.CapsuleA, shape.CapsuleB, shape.CapsuleRadius, color);
+                        DrawCapsule(snappedWorldOrigin, shape.CapsuleA, shape.CapsuleB, shape.CapsuleRadius, color, heightOffset);
                         break;
-                    }
                 }
 
-                Drawer.Point(snappedOrigin, 0.15f * CellSize, color);
-                Drawer.Text32(snappedOrigin + new float3(0f, 0.5f, 0f), $"Wt: {shape.Weight}", color, 12f);
+                Drawer.Point(snappedWorldOrigin, 0.15f * CellSize, color);
+                Drawer.Text32(snappedWorldOrigin + Basis.Normal * 0.5f, $"Wt: {shape.Weight}", color, 12f);
             }
 
-            private void DrawRect(float3 worldOrigin, int2 min, int2 size, Color color)
+            private void DrawRect(float3 localOrigin, int2 min, int2 size, Color color, float heightOffset)
             {
                 if (size.x <= 0 || size.y <= 0) return;
+                
+                var startGridPos = Basis.ToGridSpace(localOrigin) + new float2(min.x * CellSize, min.y * CellSize);
+                startGridPos -= new float2(CellSize * 0.5f, CellSize * 0.5f);
 
-                var start = worldOrigin + new float3(min.x * CellSize, 0, min.y * CellSize);
-
-                start -= new float3(CellSize * 0.5f, 0, CellSize * 0.5f);
-
-                var p0 = start;
-                var p1 = start + new float3(size.x * CellSize, 0, 0);
-                var p2 = start + new float3(size.x * CellSize, 0, size.y * CellSize);
-                var p3 = start + new float3(0, 0, size.y * CellSize);
+                var p0 = Basis.ToWorldSpace(startGridPos, heightOffset);
+                var p1 = Basis.ToWorldSpace(startGridPos + new float2(size.x * CellSize, 0), heightOffset);
+                var p2 = Basis.ToWorldSpace(startGridPos + new float2(size.x * CellSize, size.y * CellSize), heightOffset);
+                var p3 = Basis.ToWorldSpace(startGridPos + new float2(0, size.y * CellSize), heightOffset);
 
                 Drawer.Quad(p0, p1, p2, p3, color);
             }
 
-            private void DrawDisc(float3 worldOrigin, int2 center, int radius, Color color)
+            private void DrawDisc(float3 localOrigin, int2 center, int radius, Color color, float heightOffset)
             {
                 if (radius < 0) return;
-
-                var worldCenter = worldOrigin + new float3(center.x * CellSize, 0, center.y * CellSize);
-
+                var centerGridPos = Basis.ToGridSpace(localOrigin) + new float2(center.x * CellSize, center.y * CellSize);
+                var worldCenter = Basis.ToWorldSpace(centerGridPos, heightOffset);
+                
                 var r = (radius + 0.5f) * CellSize;
-
-                Drawer.Circle(worldCenter, math.up() * r, color);
+                Drawer.Circle(worldCenter, Basis.Normal * r, color);
             }
 
-            private void DrawCapsule(float3 worldOrigin, int2 a, int2 b, int radius, Color color)
+            private void DrawCapsule(float3 localOrigin, int2 a, int2 b, int radius, Color color, float heightOffset)
             {
                 if (radius < 0) return;
-
-                var centerA = worldOrigin + new float3(a.x * CellSize, 0, a.y * CellSize);
-                var centerB = worldOrigin + new float3(b.x * CellSize, 0, b.y * CellSize);
+                
+                var localGridSpace = Basis.ToGridSpace(localOrigin);
+                var centerA = Basis.ToWorldSpace(localGridSpace + new float2(a.x * CellSize, a.y * CellSize), heightOffset);
+                var centerB = Basis.ToWorldSpace(localGridSpace + new float2(b.x * CellSize, b.y * CellSize), heightOffset);
                 var r = (radius + 0.5f) * CellSize;
 
-                Drawer.Circle(centerA, math.up() * r, color);
-                Drawer.Circle(centerB, math.up() * r, color);
+                Drawer.Circle(centerA, Basis.Normal * r, color);
+                Drawer.Circle(centerB, Basis.Normal * r, color);
 
                 if (math.any(a != b))
                 {
                     var dir = math.normalize(centerB - centerA);
-                    var right = math.cross(math.up(), dir) * r;
-
+                    var right = math.cross(Basis.Normal, dir) * r;
                     Drawer.Line(centerA + right, centerB + right, color);
                     Drawer.Line(centerA - right, centerB - right, color);
                 }
@@ -205,5 +198,4 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         }
     }
 }
-
 #endif

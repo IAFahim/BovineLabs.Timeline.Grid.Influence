@@ -1,12 +1,47 @@
+using Unity.Entities;
+using Unity.Mathematics;
+
 namespace BovineLabs.Timeline.Grid.Influence.Data
 {
-    using Unity.Entities;
-    using Unity.Mathematics;
-
     [System.Serializable]
     public struct InfluenceGridSettings : IComponentData
     {
         public float CellSize;
         public float3 PlaneNormal;
+        public int ChunkSizePowerOfTwo;
+    }
+
+    public struct GridBasis
+    {
+        public float3 Right;
+        public float3 Forward;
+        public float3 Normal;
+
+        public GridBasis(float3 normal)
+        {
+            Normal = math.normalizesafe(normal, math.up());
+            
+            // Generate robust tangents
+            if (math.abs(math.dot(Normal, math.up())) > 0.99f)
+            {
+                Forward = math.forward();
+                Right = math.right();
+            }
+            else
+            {
+                Right = math.normalize(math.cross(math.up(), Normal));
+                Forward = math.cross(Normal, Right);
+            }
+        }
+
+        public float2 ToGridSpace(float3 worldPos)
+        {
+            return new float2(math.dot(worldPos, Right), math.dot(worldPos, Forward));
+        }
+
+        public float3 ToWorldSpace(float2 gridPos, float heightOffset = 0f)
+        {
+            return Right * gridPos.x + Forward * gridPos.y + Normal * heightOffset;
+        }
     }
 }

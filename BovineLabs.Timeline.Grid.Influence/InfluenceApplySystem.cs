@@ -1,18 +1,18 @@
+using BovineLabs.Timeline.Data;
+using BovineLabs.Timeline.Grid.Influence.Data;
+using Unity.Burst;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Entities;
+using Unity.Jobs;
+using Unity.Mathematics;
+using Unity.Transforms;
+
 namespace BovineLabs.Timeline.Grid.Influence
 {
-    using BovineLabs.Timeline.Data;
-    using BovineLabs.Timeline.Grid.Influence.Data;
-    using Unity.Burst;
-    using Unity.Collections;
-    using Unity.Collections.LowLevel.Unsafe;
-    using Unity.Entities;
-    using Unity.Jobs;
-    using Unity.Mathematics;
-    using Unity.Transforms;
-
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     [UpdateAfter(typeof(TimelineComponentAnimationGroup))]
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation | WorldSystemFilterFlags.ClientSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.Editor)]
     public partial struct InfluenceApplySystem : ISystem
     {
         private EntityQuery _activeQuery;
@@ -20,9 +20,7 @@ namespace BovineLabs.Timeline.Grid.Influence
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            var grid = InfluenceGrid.Create(16, Allocator.Persistent);
-            state.EntityManager.AddComponentData(state.SystemHandle, new InfluenceGridComponent { Grid = grid });
-            state.EntityManager.AddComponentData(state.SystemHandle, new InfluenceGridSettings { CellSize = 1f, PlaneNormal = new float3(0, 1, 0) });
+            state.RequireForUpdate<InfluenceGridSettings>();
 
             _activeQuery = SystemAPI.QueryBuilder()
                 .WithAll<InfluenceClipData, TrackBinding, ClipActive>()
@@ -32,22 +30,38 @@ namespace BovineLabs.Timeline.Grid.Influence
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            SystemAPI.GetComponent<InfluenceGridComponent>(state.SystemHandle).Grid.Dispose();
+            if (SystemAPI.TryGetSingletonRW<InfluenceGridComponent>(out var gridComp))
+            {
+                gridComp.ValueRW.Grid.Dispose();
+            }
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            var settings = SystemAPI.GetComponent<InfluenceGridSettings>(state.SystemHandle);
-            var grid = SystemAPI.GetComponent<InfluenceGridComponent>(state.SystemHandle).Grid;
+            var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
 
+            // Lazily allocate the grid as soon as settings exist
+            if (!SystemAPI.TryGetSingletonRW<InfluenceGridComponent>(out var gridRw))
+            {
+                var newGrid = InfluenceGrid.Create(settings.ChunkSizePowerOfTwo, Allocator.Persistent);
+                var entity = state.EntityManager.CreateEntity();
+                state.EntityManager.AddComponentData(entity, new InfluenceGridComponent { Grid = newGrid });
+                return; // initialized, defer logic to next frame
+            }
+
+            var grid = gridRw.ValueRW.Grid;
             var count = _activeQuery.CalculateEntityCountWithoutFiltering();
+            if (count == 0) return;
+
             var stamps = new NativeList<Stamp>(count, state.WorldUpdateAllocator);
+            var basis = new GridBasis(settings.PlaneNormal);
 
             state.Dependency = new GatherStampsJob
             {
                 Stamps = stamps.AsParallelWriter(),
                 CellSize = settings.CellSize,
+                Basis = basis,
                 LtwComponentLookup = SystemAPI.GetComponentLookup<LocalToWorld>(true)
             }.ScheduleParallel(_activeQuery, state.Dependency);
 
@@ -73,17 +87,19 @@ namespace BovineLabs.Timeline.Grid.Influence
             public NativeList<Stamp>.ParallelWriter Stamps;
             [ReadOnly] public ComponentLookup<LocalToWorld> LtwComponentLookup; 
             public float CellSize;
+            public GridBasis Basis;
 
             private void Execute(in InfluenceClipData clipData, in TrackBinding binding)
             {
-                if (binding.Value == Entity.Null) return;
-                if (!LtwComponentLookup.TryGetComponent(binding.Value, out var ltw)) return;
+                if (binding.Value == Entity.Null || !LtwComponentLookup.TryGetComponent(binding.Value, out var ltw)) 
+                    return;
 
                 var worldPos = ltw.Position + math.rotate(ltw.Rotation, clipData.LocalOffset);
+                var projectedPos = Basis.ToGridSpace(worldPos);
 
                 var gridOrigin = new int2(
-                    (int)math.floor(worldPos.x / CellSize),
-                    (int)math.floor(worldPos.z / CellSize)
+                    (int)math.floor(projectedPos.x / CellSize),
+                    (int)math.floor(projectedPos.y / CellSize)
                 );
 
                 Stamps.AddNoResize(new Stamp(clipData.Shape, gridOrigin));

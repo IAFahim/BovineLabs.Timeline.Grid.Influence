@@ -8,6 +8,7 @@ using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Transforms;
 using UnityEngine;
@@ -20,17 +21,33 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         [ConfigVar("influencegizmo.draw-enabled", false, "Enable the grid influence gizmo.")]
         public static readonly SharedStatic<bool> Enabled = SharedStatic<bool>.GetOrCreate<Tags.Enabled>();
 
-        [ConfigVar("influencegizmo.positive-color", 0.2f, 0.8f, 0.4f, 0.8f, "Color for positive influence (Green)")]
+        [ConfigVar("influencegizmo.draw-stamps", true, "Draw individual influence stamps (clips) as wireframes.")]
+        public static readonly SharedStatic<bool> DrawStamps = SharedStatic<bool>.GetOrCreate<Tags.DrawStamps>();
+
+        [ConfigVar("influencegizmo.draw-grid", true, "Draw the active grid chunk boundaries.")]
+        public static readonly SharedStatic<bool> DrawGrid = SharedStatic<bool>.GetOrCreate<Tags.DrawGrid>();
+
+        [ConfigVar("influencegizmo.draw-values", true, "Draw the accumulated influence values in the grid.")]
+        public static readonly SharedStatic<bool> DrawValues = SharedStatic<bool>.GetOrCreate<Tags.DrawValues>();
+
+        [ConfigVar("influencegizmo.positive-color", 0.2f, 0.8f, 0.4f, 1.0f, "Color for positive influence (Green)")]
         public static readonly SharedStatic<Color> PositiveColor = SharedStatic<Color>.GetOrCreate<Tags.PositiveColor>();
 
-        [ConfigVar("influencegizmo.negative-color", 0.9f, 0.2f, 0.2f, 0.8f, "Color for negative influence (Red)")]
+        [ConfigVar("influencegizmo.negative-color", 0.9f, 0.2f, 0.2f, 1.0f, "Color for negative influence (Red)")]
         public static readonly SharedStatic<Color> NegativeColor = SharedStatic<Color>.GetOrCreate<Tags.NegativeColor>();
+
+        [ConfigVar("influencegizmo.grid-color", 1.0f, 1.0f, 1.0f, 0.15f, "Color for the chunk boundary lines")]
+        public static readonly SharedStatic<Color> GridColor = SharedStatic<Color>.GetOrCreate<Tags.GridColor>();
 
         private struct Tags
         {
             public struct Enabled { }
+            public struct DrawStamps { }
+            public struct DrawGrid { }
+            public struct DrawValues { }
             public struct PositiveColor { }
             public struct NegativeColor { }
+            public struct GridColor { }
         }
     }
 
@@ -50,7 +67,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             _query = SystemAPI.QueryBuilder()
                 .WithAll<TrackBinding, InfluenceClipData, ClipActive>()
                 .Build();
-            state.RequireForUpdate(_query);
         }
 
         [BurstCompile]
@@ -61,22 +77,56 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 return;
 
             var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
+            var basis = new GridBasis(settings.PlaneNormal);
 
-            state.Dependency = new DrawJob
+            // 1. Draw individual clip stamps (minimal wireframe)
+            if (InfluenceDebugSystemConfig.DrawStamps.Data && !_query.IsEmpty)
             {
-                Drawer        = drawer,
-                PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
-                NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
-                CellSize      = settings.CellSize,
-                Basis         = new GridBasis(settings.PlaneNormal),
-                LtwLookup     = SystemAPI.GetComponentLookup<LocalToWorld>(true),
-                LocalTransformLookup = SystemAPI.GetComponentLookup<LocalTransform>(true),
-                ParentLookup = SystemAPI.GetComponentLookup<Parent>(true)
-            }.ScheduleParallel(_query, state.Dependency);
+                state.Dependency = new DrawStampsJob
+                {
+                    Drawer        = drawer,
+                    PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
+                    NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
+                    CellSize      = settings.CellSize,
+                    Basis         = basis,
+                    LtwLookup     = SystemAPI.GetComponentLookup<LocalToWorld>(true),
+                    LocalTransformLookup = SystemAPI.GetComponentLookup<LocalTransform>(true),
+                    ParentLookup = SystemAPI.GetComponentLookup<Parent>(true)
+                }.ScheduleParallel(_query, state.Dependency);
+            }
+
+            // 2. Draw global grid resolution (chunk bounds and cell values)
+            bool drawGrid = InfluenceDebugSystemConfig.DrawGrid.Data;
+            bool drawValues = InfluenceDebugSystemConfig.DrawValues.Data;
+
+            if ((drawGrid || drawValues) && SystemAPI.TryGetSingleton<InfluenceGridComponent>(out var gridComp))
+            {
+                var grid = gridComp.Grid;
+                if (grid.IsCreated && grid.ActiveChunks.IsCreated)
+                {
+                    state.Dependency = new DrawGridJob
+                    {
+                        Drawer        = drawer,
+                        PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
+                        NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
+                        GridColor     = InfluenceDebugSystemConfig.GridColor.Data,
+                        CellSize      = settings.CellSize,
+                        Basis         = basis,
+                        DrawGrid      = drawGrid,
+                        DrawValues    = drawValues,
+                        ActiveChunks  = grid.ActiveChunks.AsDeferredJobArray(),
+                        ChunkCoords   = grid.ChunkCoords.AsDeferredJobArray(),
+                        ChunkData     = grid.ChunkData.AsDeferredJobArray(),
+                        ChunkSize     = grid.ChunkSize,
+                        Stride        = grid.Stride,
+                        Dimension     = grid.Dimension
+                    }.Schedule(state.Dependency);
+                }
+            }
         }
 
         [BurstCompile]
-        private partial struct DrawJob : IJobEntity
+        private partial struct DrawStampsJob : IJobEntity
         {
             public Drawer Drawer;
             public Color PositiveColor;
@@ -103,11 +153,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     return;
 
                 var shape = active.Shape;
+                
+                // Mute the colors slightly for the stamps so they don't overpower the grid values
                 var color = shape.Weight >= 0 ? PositiveColor : NegativeColor;
+                color.a *= 0.8f;
 
                 var origin = GetAntiJitterPosition(binding.Value, ltw.Position) + math.rotate(ltw.Rotation, active.LocalOffset);
 
-                // Preserve height offset relative to the normal
                 var heightOffset = math.dot(origin, Basis.Normal);
                 var projectedPos = Basis.ToGridSpace(origin);
 
@@ -125,32 +177,36 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 switch (shape.Kind)
                 {
                     case ShapeKind.SolidRect:
-                        DrawRect(snappedWorldOrigin, shape.RectMin, shape.RectSize, color, heightOffset);
+                        DrawRectWireframe(snappedWorldOrigin, shape.RectMin, shape.RectSize, color, heightOffset);
                         break;
                     case ShapeKind.RectShell:
-                        DrawRect(snappedWorldOrigin, shape.ShellMin, shape.ShellSize, color, heightOffset);
+                        DrawRectWireframe(snappedWorldOrigin, shape.ShellMin, shape.ShellSize, color, heightOffset);
                         var innerMin = shape.ShellMin + new int2(shape.ShellThickness);
                         var innerSize = shape.ShellSize - new int2(shape.ShellThickness * 2);
-                        DrawRect(snappedWorldOrigin, innerMin, innerSize, color, heightOffset);
+                        DrawRectWireframe(snappedWorldOrigin, innerMin, innerSize, color, heightOffset);
                         break;
                     case ShapeKind.Disc:
-                        DrawDisc(snappedWorldOrigin, shape.DiscCenter, shape.DiscRadius, color, heightOffset);
+                        DrawDiscWireframe(snappedWorldOrigin, shape.DiscCenter, shape.DiscRadius, color, heightOffset);
                         break;
                     case ShapeKind.Annulus:
-                        DrawDisc(snappedWorldOrigin, shape.AnnulusCenter, shape.AnnulusOuter, color, heightOffset);
+                        DrawDiscWireframe(snappedWorldOrigin, shape.AnnulusCenter, shape.AnnulusOuter, color, heightOffset);
                         if (shape.AnnulusInner >= 0)
-                            DrawDisc(snappedWorldOrigin, shape.AnnulusCenter, shape.AnnulusInner, color, heightOffset);
+                            DrawDiscWireframe(snappedWorldOrigin, shape.AnnulusCenter, shape.AnnulusInner, color, heightOffset);
                         break;
                     case ShapeKind.Capsule:
-                        DrawCapsule(snappedWorldOrigin, shape.CapsuleA, shape.CapsuleB, shape.CapsuleRadius, color, heightOffset);
+                        DrawCapsuleWireframe(snappedWorldOrigin, shape.CapsuleA, shape.CapsuleB, shape.CapsuleRadius, color, heightOffset);
                         break;
                 }
 
-                Drawer.Point(snappedWorldOrigin, 0.15f * CellSize, color);
-                Drawer.Text32(snappedWorldOrigin + Basis.Normal * 0.5f, $"Wt: {shape.Weight}", color, 12f);
+                Drawer.Point(snappedWorldOrigin, 0.1f * CellSize, color);
+                
+                FixedString32Bytes label = default;
+                label.Append("Wt: ");
+                label.Append(shape.Weight);
+                Drawer.Text32(snappedWorldOrigin + Basis.Normal * 0.3f, label, color, 10f);
             }
 
-            private void DrawRect(float3 localOrigin, int2 min, int2 size, Color color, float heightOffset)
+            private void DrawRectWireframe(float3 localOrigin, int2 min, int2 size, Color color, float heightOffset)
             {
                 if (size.x <= 0 || size.y <= 0) return;
                 
@@ -162,10 +218,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 var p2 = Basis.ToWorldSpace(startGridPos + new float2(size.x * CellSize, size.y * CellSize), heightOffset);
                 var p3 = Basis.ToWorldSpace(startGridPos + new float2(0, size.y * CellSize), heightOffset);
 
-                Drawer.Quad(p0, p1, p2, p3, color);
+                Drawer.Line(p0, p1, color);
+                Drawer.Line(p1, p2, color);
+                Drawer.Line(p2, p3, color);
+                Drawer.Line(p3, p0, color);
             }
 
-            private void DrawDisc(float3 localOrigin, int2 center, int radius, Color color, float heightOffset)
+            private void DrawDiscWireframe(float3 localOrigin, int2 center, int radius, Color color, float heightOffset)
             {
                 if (radius < 0) return;
                 var centerGridPos = Basis.ToGridSpace(localOrigin) + new float2(center.x * CellSize, center.y * CellSize);
@@ -175,7 +234,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 Drawer.Circle(worldCenter, Basis.Normal * r, color);
             }
 
-            private void DrawCapsule(float3 localOrigin, int2 a, int2 b, int radius, Color color, float heightOffset)
+            private void DrawCapsuleWireframe(float3 localOrigin, int2 a, int2 b, int radius, Color color, float heightOffset)
             {
                 if (radius < 0) return;
                 
@@ -193,6 +252,92 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     var right = math.cross(Basis.Normal, dir) * r;
                     Drawer.Line(centerA + right, centerB + right, color);
                     Drawer.Line(centerA - right, centerB - right, color);
+                }
+            }
+        }
+
+        [BurstCompile]
+        private struct DrawGridJob : IJob
+        {
+            public Drawer Drawer;
+            public Color PositiveColor;
+            public Color NegativeColor;
+            public Color GridColor;
+            public float CellSize;
+            public GridBasis Basis;
+            public bool DrawGrid;
+            public bool DrawValues;
+
+            [ReadOnly] public NativeArray<int> ActiveChunks;
+            [ReadOnly] public NativeArray<int2> ChunkCoords;
+            [ReadOnly] public NativeArray<int> ChunkData;
+
+            public int ChunkSize;
+            public int Stride;
+            public int Dimension;
+
+            public void Execute()
+            {
+                // To keep it clean, we render cell values slightly below the normal plane
+                // so the text doesn't Z-fight with ground geometry.
+                float renderHeightOffset = 0.05f;
+
+                for (int i = 0; i < ActiveChunks.Length; i++)
+                {
+                    int slotIdx = ActiveChunks[i];
+                    int2 coord = ChunkCoords[slotIdx];
+                    int baseDataIdx = slotIdx * Stride * Dimension;
+
+                    float2 chunkGridOrigin = new float2(coord.x * ChunkSize, coord.y * ChunkSize) * CellSize;
+                    
+                    if (DrawGrid)
+                    {
+                        float3 p0 = Basis.ToWorldSpace(chunkGridOrigin, renderHeightOffset);
+                        float3 p1 = Basis.ToWorldSpace(chunkGridOrigin + new float2(ChunkSize * CellSize, 0), renderHeightOffset);
+                        float3 p2 = Basis.ToWorldSpace(chunkGridOrigin + new float2(ChunkSize * CellSize, ChunkSize * CellSize), renderHeightOffset);
+                        float3 p3 = Basis.ToWorldSpace(chunkGridOrigin + new float2(0, ChunkSize * CellSize), renderHeightOffset);
+
+                        Drawer.Line(p0, p1, GridColor);
+                        Drawer.Line(p1, p2, GridColor);
+                        Drawer.Line(p2, p3, GridColor);
+                        Drawer.Line(p3, p0, GridColor);
+                    }
+
+                    if (DrawValues)
+                    {
+                        for (int y = 0; y < ChunkSize; y++)
+                        {
+                            for (int x = 0; x < ChunkSize; x++)
+                            {
+                                int val = ChunkData[baseDataIdx + y * Stride + x];
+                                if (val == 0) continue;
+
+                                float2 cellGridPos = chunkGridOrigin + new float2(x * CellSize, y * CellSize);
+                                float2 cellCenter = cellGridPos + new float2(CellSize * 0.5f);
+                                float3 worldCenter = Basis.ToWorldSpace(cellCenter, renderHeightOffset);
+
+                                Color cellColor = val > 0 ? PositiveColor : NegativeColor;
+                                
+                                // Heatmap visualization: clamp max visually around weight of 10
+                                float intensity = math.clamp(math.abs(val) / 10f, 0.15f, 0.75f);
+                                Color quadColor = cellColor;
+                                quadColor.a *= intensity;
+
+                                // Slightly pad the quad inward so individual cells are distinct
+                                float pad = CellSize * 0.05f;
+                                float3 c0 = Basis.ToWorldSpace(cellGridPos + new float2(pad, pad), renderHeightOffset);
+                                float3 c1 = Basis.ToWorldSpace(cellGridPos + new float2(CellSize - pad, pad), renderHeightOffset);
+                                float3 c2 = Basis.ToWorldSpace(cellGridPos + new float2(CellSize - pad, CellSize - pad), renderHeightOffset);
+                                float3 c3 = Basis.ToWorldSpace(cellGridPos + new float2(pad, CellSize - pad), renderHeightOffset);
+
+                                Drawer.Quad(c0, c1, c2, c3, quadColor);
+                                
+                                FixedString32Bytes text = default;
+                                text.Append(val);
+                                Drawer.Text32(worldCenter, text, cellColor, 12f);
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
 using Unity.Collections;
@@ -9,7 +10,7 @@ using static Unity.Burst.Intrinsics.X86;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data
 {
-
+    [BurstCompile]
     public unsafe struct InfluenceField : INativeDisposable
     {
         NativeParallelHashMap<int2, int> _index;
@@ -33,9 +34,18 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
             public uint LastWrittenFrame;
         }
+        
+        public bool IsCreated
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => _slots.IsCreated;
+        }
 
-        public bool IsCreated => _slots.IsCreated;
-        public JobHandle LastScheduledHandle => _lastScheduledHandle;
+        public JobHandle LastScheduledHandle
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => _lastScheduledHandle;
+        }
 
         public static InfluenceField Create(int chunkSizePowerOfTwo, AllocatorManager.AllocatorHandle allocator)
         {
@@ -150,11 +160,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             NativeList<WorldRect> rects = new NativeList<WorldRect>(capacity, Allocator.Temp);
             Rasterizer.Emit(stamp, ref rects);
 
-            for (int i = 0; i < rects.Length; i++)
-            {
-                BroadcastRect(rects[i]);
-            }
-
+            for (int i = 0; i < rects.Length; i++) BroadcastRect(rects[i]);
             rects.Dispose();
         }
 
@@ -166,26 +172,17 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             Complete();
 
             int2 coord = new int2(cell.x >> _log2, cell.y >> _log2);
-            if (!_index.TryGetValue(coord, out int slot))
-            {
-                return 0;
-            }
+            if (!_index.TryGetValue(coord, out int slot)) return 0;
 
             ChunkSlot chunk = _slots[slot];
-            if (chunk.LastWrittenFrame != _frameId)
-            {
-                return 0;
-            }
+            if (chunk.LastWrittenFrame != _frameId) return 0;
 
             int baseX = coord.x << _log2;
             int baseY = coord.y << _log2;
             int lx = cell.x - baseX;
             int ly = cell.y - baseY;
 
-            if ((uint)lx >= (uint)_chunkSize || (uint)ly >= (uint)_chunkSize)
-            {
-                return 0;
-            }
+            if ((uint)lx >= (uint)_chunkSize || (uint)ly >= (uint)_chunkSize) return 0;
 
             return chunk.Field[ly * _stride + lx];
         }
@@ -195,16 +192,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             ThrowIfNotCreated();
             Complete();
 
-            if (!_index.TryGetValue(coord, out int slot))
-            {
-                return default;
-            }
+            if (!_index.TryGetValue(coord, out int slot)) return default;
 
             ChunkSlot chunk = _slots[slot];
-            if (chunk.LastWrittenFrame != _frameId)
-            {
-                return default;
-            }
+            if (chunk.LastWrittenFrame != _frameId) return default;
 
             return new ChunkView
             {
@@ -217,10 +208,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         public void Dispose()
         {
-            if (!_slots.IsCreated && !_activeChunks.IsCreated && !_index.IsCreated)
-            {
-                return;
-            }
+            if (!_slots.IsCreated && !_activeChunks.IsCreated && !_index.IsCreated) return;
 
             Complete();
 
@@ -238,15 +226,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 _slots.Dispose();
             }
 
-            if (_activeChunks.IsCreated)
-            {
-                _activeChunks.Dispose();
-            }
+            if (_activeChunks.IsCreated) _activeChunks.Dispose();
 
-            if (_index.IsCreated)
-            {
-                _index.Dispose();
-            }
+            if (_index.IsCreated) _index.Dispose();
 
             this = default;
         }
@@ -255,10 +237,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             JobHandle dependency = JobHandle.CombineDependencies(inputDeps, _lastScheduledHandle);
 
-            if (!_slots.IsCreated && !_activeChunks.IsCreated && !_index.IsCreated)
-            {
-                return dependency;
-            }
+            if (!_slots.IsCreated && !_activeChunks.IsCreated && !_index.IsCreated) return dependency;
 
             JobHandle handle = dependency;
 
@@ -274,15 +253,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 handle = _slots.Dispose(handle);
             }
 
-            if (_activeChunks.IsCreated)
-            {
-                handle = _activeChunks.Dispose(handle);
-            }
-
-            if (_index.IsCreated)
-            {
-                handle = _index.Dispose(handle);
-            }
+            if (_activeChunks.IsCreated) handle = _activeChunks.Dispose(handle);
+            if (_index.IsCreated) handle = _index.Dispose(handle);
 
             this = default;
             return handle;
@@ -316,10 +288,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         int EnsureSlot(int2 coord)
         {
-            if (_index.TryGetValue(coord, out int existing))
-            {
-                return existing;
-            }
+            if (_index.TryGetValue(coord, out int existing)) return existing;
 
             int items = _stride * _dimension;
             long bytes = (long)items * sizeof(int);
@@ -341,10 +310,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         void EnsureBounds(AlignedRect bounds)
         {
-            if (bounds.IsEmpty)
-            {
-                return;
-            }
+            if (bounds.IsEmpty) return;
 
             int cx0 = bounds.Min.x >> _log2;
             int cy0 = bounds.Min.y >> _log2;
@@ -353,33 +319,28 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
             for (int cy = cy0; cy <= cy1; cy++)
             {
-                for (int cx = cx0; cx <= cx1; cx++)
-                {
-                    EnsureSlot(new int2(cx, cy));
-                }
+                for (int cx = cx0; cx <= cx1; cx++) EnsureSlot(new int2(cx, cy));
             }
         }
 
         void ActivateChunkForCurrentFrame(ChunkSlot* slotPtr)
         {
-            if (slotPtr->LastWrittenFrame == _frameId)
-            {
-                return;
-            }
+            if (slotPtr->LastWrittenFrame == _frameId) return;
 
             UnsafeUtility.MemClear(slotPtr->Field, ChunkBytes);
             slotPtr->LastWrittenFrame = _frameId;
         }
 
-        long ChunkBytes => (long)_stride * _dimension * sizeof(int);
-        
+        long ChunkBytes
+        {
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            get => (long)_stride * _dimension * sizeof(int);
+        }
+
         void BroadcastRect(WorldRect rect)
         {
             AlignedRect bounds = rect.Bounds;
-            if (bounds.IsEmpty)
-            {
-                return;
-            }
+            if (bounds.IsEmpty) return;
 
             int weight = rect.Weight;
             int cx0 = bounds.Min.x >> _log2;
@@ -566,7 +527,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             }
         }
     }
-
+    
     public unsafe struct ChunkView
     {
         [NativeDisableUnsafePtrRestriction]
@@ -578,12 +539,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         public bool IsValid => Field != null;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool ContainsWorld(int2 worldPos)
         {
             int2 local = worldPos - Base;
             return (uint)local.x < (uint)ChunkSize && (uint)local.y < (uint)ChunkSize;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadLocal(int2 localPos)
         {
             if ((uint)localPos.x >= (uint)ChunkSize || (uint)localPos.y >= (uint)ChunkSize)
@@ -594,6 +557,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             return Field[localPos.y * Stride + localPos.x];
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadWorld(int2 worldPos)
         {
             int2 local = worldPos - Base;

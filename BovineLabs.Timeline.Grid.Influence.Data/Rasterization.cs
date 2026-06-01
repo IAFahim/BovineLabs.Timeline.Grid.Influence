@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
@@ -82,6 +83,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int EstimateRectCount(Stamp stamp)
         {
             InfluenceShape shape = stamp.Shape;
@@ -128,7 +130,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     return 0;
             }
         }
-
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Emit(Stamp stamp, ref NativeList<WorldRect> output)
         {
             InfluenceShape shape = stamp.Shape;
@@ -159,52 +162,40 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static int DiscRowCount(int radius)
         {
-            if (radius < 0)
-            {
-                return 0;
-            }
-
+            if (radius < 0) return 0;
             long rows = 2L * radius + 1L;
             return ClampToInt(rows);
         }
-
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static int SaturatingAdd(int a, int b)
         {
             long sum = (long)a + b;
             return ClampToInt(sum);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static int ClampToInt(long value)
         {
-            if (value <= 0)
-            {
-                return 0;
-            }
+            if (value <= 0) return 0;
 
             return value > int.MaxValue ? int.MaxValue : (int)value;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static void EmitRect(ref NativeList<WorldRect> output, int2 min, int2 size, int weight)
         {
-            if (size.x <= 0 || size.y <= 0)
-            {
-                return;
-            }
-
+            if (size.x <= 0 || size.y <= 0) return;
             output.Add(new WorldRect(new AlignedRect(min, min + size), weight));
         }
 
         static void EmitShell(ref NativeList<WorldRect> output, int2 min, int2 size, int thickness, int weight)
         {
-            if (size.x <= 0 || size.y <= 0 || thickness <= 0)
-            {
-                return;
-            }
-
+            if (size.x <= 0 || size.y <= 0 || thickness <= 0) return;
             EmitRect(ref output, min, size, weight);
-
             int2 innerMin = min + new int2(thickness, thickness);
             int2 innerSize = size - new int2(2 * thickness, 2 * thickness);
             EmitRect(ref output, innerMin, innerSize, -weight);
@@ -212,25 +203,16 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         static void EmitAnnulus(ref NativeList<WorldRect> output, int2 center, int outerRadius, int innerRadius, int weight)
         {
-            if (outerRadius < 0 || innerRadius >= outerRadius)
-            {
-                return;
-            }
+            if (outerRadius < 0 || innerRadius >= outerRadius) return;
 
             EmitDisc(ref output, center, outerRadius, weight);
 
-            if (innerRadius >= 0)
-            {
-                EmitDisc(ref output, center, innerRadius, -weight);
-            }
+            if (innerRadius >= 0) EmitDisc(ref output, center, innerRadius, -weight);
         }
 
         static void EmitDisc(ref NativeList<WorldRect> output, int2 center, int radius, int weight)
         {
-            if (radius < 0)
-            {
-                return;
-            }
+            if (radius < 0) return;
 
             long radiusSquared = (long)radius * radius;
 
@@ -250,10 +232,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         static void EmitCapsule(ref NativeList<WorldRect> output, int2 a, int2 b, int radius, int weight)
         {
-            if (radius < 0)
-            {
-                return;
-            }
+            if (radius < 0) return;
 
             float2 endA = new float2(a.x, a.y);
             float2 endB = new float2(b.x, b.y);
@@ -288,18 +267,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 covered |= DiscRow(endB, r, row, ref lo, ref hi);
                 covered |= CoreRow(c0, c1, c2, c3, row, ref lo, ref hi);
 
-                if (!covered)
-                {
-                    continue;
-                }
+                if (!covered) continue;
 
                 int xStart = (int)math.ceil(lo - boundary);
                 int xEnd = (int)math.floor(hi + boundary);
 
-                if (xStart > xEnd)
-                {
-                    continue;
-                }
+                if (xStart > xEnd) continue;
 
                 output.Add(new WorldRect(
                     new AlignedRect(new int2(xStart, y), new int2(xEnd + 1, y + 1)),
@@ -307,13 +280,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         static bool DiscRow(float2 center, float radius, float row, ref float lo, ref float hi)
         {
             float dy = row - center.y;
-            if (math.abs(dy) > radius)
-            {
-                return false;
-            }
+            if (math.abs(dy) > radius) return false;
 
             float half = math.sqrt(radius * radius - dy * dy);
             lo = math.min(lo, center.x - half);
@@ -336,16 +307,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             float y0 = p.y;
             float y1 = q.y;
 
-            if (y0 == y1)
-            {
-                return false;
-            }
+            if (y0 == y1) return false;
 
             float t = (row - y0) / (y1 - y0);
-            if (t < 0f || t > 1f)
-            {
-                return false;
-            }
+            if (t < 0f || t > 1f) return false;
 
             float x = p.x + (q.x - p.x) * t;
             lo = math.min(lo, x);

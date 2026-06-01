@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data
@@ -48,23 +49,29 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public int2 CapsuleB => _v1;
         public int CapsuleRadius => _i0;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public InfluenceShape WithWeight(int weight)
-            => new InfluenceShape(Kind, weight, _v0, _v1, _i0, _i1);
+            => new(Kind, weight, _v0, _v1, _i0, _i1);
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static InfluenceShape SolidRect(int2 min, int2 size, int weight)
-            => new InfluenceShape(ShapeKind.SolidRect, weight, min, size, 0, 0);
-
+            => new(ShapeKind.SolidRect, weight, min, size, 0, 0);
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static InfluenceShape RectShell(int2 min, int2 size, int thickness, int weight)
-            => new InfluenceShape(ShapeKind.RectShell, weight, min, size, thickness, 0);
+            => new(ShapeKind.RectShell, weight, min, size, thickness, 0);
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static InfluenceShape Disc(int2 center, int radius, int weight)
-            => new InfluenceShape(ShapeKind.Disc, weight, center, int2.zero, radius, 0);
+            => new(ShapeKind.Disc, weight, center, int2.zero, radius, 0);
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static InfluenceShape Annulus(int2 center, int outerRadius, int innerRadius, int weight)
-            => new InfluenceShape(ShapeKind.Annulus, weight, center, int2.zero, outerRadius, innerRadius);
+            => new(ShapeKind.Annulus, weight, center, int2.zero, outerRadius, innerRadius);
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static InfluenceShape Capsule(int2 a, int2 b, int radius, int weight)
-            => new InfluenceShape(ShapeKind.Capsule, weight, a, b, radius, 0);
+            => new(ShapeKind.Capsule, weight, a, b, radius, 0);
     }
 
     public readonly struct Stamp
@@ -77,7 +84,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             Shape = shape;
             Origin = origin;
         }
-
-        public Stamp Negated() => new Stamp(Shape.WithWeight(-Shape.Weight), Origin);
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Stamp Negated() => new(Shape.WithWeight(-Shape.Weight), Origin);
     }
 }

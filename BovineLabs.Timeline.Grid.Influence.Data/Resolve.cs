@@ -12,7 +12,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             HorizontalPass(field, stride, dimension);
             VerticalPass(field, stride, dimension);
         }
-
+        
         static void HorizontalPass(int* field, int stride, int dimension)
         {
             for (int y = 0; y < dimension; y++)

@@ -52,7 +52,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         {
             state.RequireForUpdate<DrawSystem.Singleton>();
             _query = SystemAPI.QueryBuilder()
-                .WithAll<TrackBinding, ActiveInfluence, ClipActive>()
+                .WithAll<TrackBinding, InfluenceClipData, ClipActive>()
                 .Build();
             state.RequireForUpdate(_query);
         }
@@ -70,7 +70,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
                 NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
                 CellSize      = InfluenceDebugSystemConfig.CellSize.Data,
-                LtwLookup     = SystemAPI.GetComponentLookup<LocalToWorld>(true)
+                LtwLookup     = SystemAPI.GetComponentLookup<LocalToWorld>(true),
+                LocalTransformLookup = SystemAPI.GetComponentLookup<LocalTransform>(true),
+                ParentLookup = SystemAPI.GetComponentLookup<Parent>(true)
             }.ScheduleParallel(_query, state.Dependency);
         }
 
@@ -81,18 +83,29 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             public Color PositiveColor;
             public Color NegativeColor;
             public float CellSize;
-
             [ReadOnly] public ComponentLookup<LocalToWorld> LtwLookup;
+            [ReadOnly] public ComponentLookup<LocalTransform> LocalTransformLookup;
+            [ReadOnly] public ComponentLookup<Parent> ParentLookup;
 
-            public void Execute(in TrackBinding binding, in ActiveInfluence active)
+            private float3 GetAntiJitterPosition(Entity e, float3 fallback)
+            {
+                if (LocalTransformLookup.HasComponent(e) && !ParentLookup.HasComponent(e))
+                {
+                    return LocalTransformLookup[e].Position;
+                }
+                return fallback;
+            }
+
+            public void Execute(in TrackBinding binding, in InfluenceClipData active)
             {
                 if (!LtwLookup.TryGetComponent(binding.Value, out var ltw))
                     return;
 
-                var shape = active.Config.Shape;
+                var shape = active.Shape;
                 var color = shape.Weight >= 0 ? PositiveColor : NegativeColor;
 
-                var origin = ltw.Position;
+                var origin = GetAntiJitterPosition(binding.Value, ltw.Position) + math.rotate(ltw.Rotation, active.LocalOffset);
+
 
                 var gridOrigin = new int2(
                     (int)math.floor(origin.x / CellSize),

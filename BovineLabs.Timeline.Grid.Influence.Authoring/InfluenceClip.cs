@@ -3,7 +3,6 @@ using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine.Timeline;
-using UnityObject = UnityEngine.Object;
 
 namespace BovineLabs.Timeline.Grid.Influence.Authoring
 {
@@ -97,13 +96,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                     break;
             }
 
-            context.Baker.AddComponent(clipEntity, new InfluenceAnimated
+            context.Baker.AddComponent(clipEntity, new InfluenceClipData
             {
-                AuthoredData = new InfluenceData
-                {
-                    Shape = shape,
-                    LocalOffset = localOffset
-                }
+                Shape = shape,
+                LocalOffset = localOffset
             });
 
             base.Bake(clipEntity, context);

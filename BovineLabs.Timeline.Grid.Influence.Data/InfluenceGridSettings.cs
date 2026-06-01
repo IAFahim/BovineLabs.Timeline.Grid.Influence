@@ -1,4 +1,3 @@
-
 namespace BovineLabs.Timeline.Grid.Influence.Data
 {
     using Unity.Entities;
@@ -8,7 +7,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
     public struct InfluenceGridSettings : IComponentData
     {
         public float CellSize;
-
         public float3 PlaneNormal;
     }
 }

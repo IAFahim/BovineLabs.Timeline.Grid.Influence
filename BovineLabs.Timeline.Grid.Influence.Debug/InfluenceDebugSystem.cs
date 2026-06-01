@@ -63,6 +63,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         {
             state.RequireForUpdate<DrawSystem.Singleton>();
             state.RequireForUpdate<InfluenceGridSettings>();
+            state.RequireForUpdate<InfluenceGridDependency>();
             
             _query = SystemAPI.QueryBuilder()
                 .WithAll<TrackBinding, InfluenceClipData, ClipActive>()
@@ -79,7 +80,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
             var basis = new GridBasis(settings.PlaneNormal);
 
-            // 1. Draw individual clip stamps (minimal wireframe)
             if (InfluenceDebugSystemConfig.DrawStamps.Data && !_query.IsEmpty)
             {
                 state.Dependency = new DrawStampsJob
@@ -89,13 +89,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
                     CellSize      = settings.CellSize,
                     Basis         = basis,
-                    LtwLookup     = SystemAPI.GetComponentLookup<LocalToWorld>(true),
-                    LocalTransformLookup = SystemAPI.GetComponentLookup<LocalTransform>(true),
-                    ParentLookup = SystemAPI.GetComponentLookup<Parent>(true)
+                    LtwLookup     = SystemAPI.GetComponentLookup<LocalToWorld>(true)
                 }.ScheduleParallel(_query, state.Dependency);
             }
 
-            // 2. Draw global grid resolution (chunk bounds and cell values)
             bool drawGrid = InfluenceDebugSystemConfig.DrawGrid.Data;
             bool drawValues = InfluenceDebugSystemConfig.DrawValues.Data;
 
@@ -104,6 +101,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 var grid = gridComp.Grid;
                 if (grid.IsCreated && grid.ActiveChunks.IsCreated)
                 {
+                    var gridDependencyRw = SystemAPI.GetSingletonRW<InfluenceGridDependency>();
+                    state.Dependency = JobHandle.CombineDependencies(state.Dependency, gridDependencyRw.ValueRO.Value);
+
                     state.Dependency = new DrawGridJob
                     {
                         Drawer        = drawer,
@@ -121,6 +121,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                         Stride        = grid.Stride,
                         Dimension     = grid.Dimension
                     }.Schedule(state.Dependency);
+
+                    gridDependencyRw.ValueRW.Value = state.Dependency;
                 }
             }
         }
@@ -135,17 +137,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             public GridBasis Basis;
 
             [ReadOnly] public ComponentLookup<LocalToWorld> LtwLookup;
-            [ReadOnly] public ComponentLookup<LocalTransform> LocalTransformLookup;
-            [ReadOnly] public ComponentLookup<Parent> ParentLookup;
-
-            private float3 GetAntiJitterPosition(Entity e, float3 fallback)
-            {
-                if (LocalTransformLookup.HasComponent(e) && !ParentLookup.HasComponent(e))
-                {
-                    return LocalTransformLookup[e].Position;
-                }
-                return fallback;
-            }
 
             public void Execute(in TrackBinding binding, in InfluenceClipData active)
             {
@@ -154,11 +145,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
                 var shape = active.Shape;
                 
-                // Mute the colors slightly for the stamps so they don't overpower the grid values
                 var color = shape.Weight >= 0 ? PositiveColor : NegativeColor;
                 color.a *= 0.8f;
 
-                var origin = GetAntiJitterPosition(binding.Value, ltw.Position) + math.rotate(ltw.Rotation, active.LocalOffset);
+                var origin = ltw.Position + math.rotate(ltw.Rotation, active.LocalOffset);
 
                 var heightOffset = math.dot(origin, Basis.Normal);
                 var projectedPos = Basis.ToGridSpace(origin);
@@ -278,8 +268,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
             public void Execute()
             {
-                // To keep it clean, we render cell values slightly below the normal plane
-                // so the text doesn't Z-fight with ground geometry.
                 float renderHeightOffset = 0.05f;
 
                 for (int i = 0; i < ActiveChunks.Length; i++)
@@ -318,12 +306,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
                                 Color cellColor = val > 0 ? PositiveColor : NegativeColor;
                                 
-                                // Heatmap visualization: clamp max visually around weight of 10
                                 float intensity = math.clamp(math.abs(val) / 10f, 0.15f, 0.75f);
                                 Color quadColor = cellColor;
                                 quadColor.a *= intensity;
 
-                                // Slightly pad the quad inward so individual cells are distinct
                                 float pad = CellSize * 0.05f;
                                 float3 c0 = Basis.ToWorldSpace(cellGridPos + new float2(pad, pad), renderHeightOffset);
                                 float3 c1 = Basis.ToWorldSpace(cellGridPos + new float2(CellSize - pad, pad), renderHeightOffset);

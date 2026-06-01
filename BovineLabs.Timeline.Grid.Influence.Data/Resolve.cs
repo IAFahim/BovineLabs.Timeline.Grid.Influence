@@ -1,8 +1,5 @@
-using Unity.Burst;
-
 namespace BovineLabs.Timeline.Grid.Influence.Data
 {
-    [BurstCompile(FloatMode = FloatMode.Fast, OptimizeFor = OptimizeFor.Performance)]
     public static unsafe class PrefixSumResolve
     {
         public static void Run(int* field, int stride, int dimension)
@@ -19,7 +16,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 int running = 0;
                 for (int x = 0; x < dimension; x++)
                 {
-                    running += row[x];
+                    running = IntegerMath.SaturatingAdd(running, row[x]);
                     row[x] = running;
                 }
             }
@@ -33,7 +30,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 int* current = field + y * stride;
                 for (int x = 0; x < dimension; x++)
                 {
-                    current[x] += above[x];
+                    current[x] = IntegerMath.SaturatingAdd(current[x], above[x]);
                 }
             }
         }

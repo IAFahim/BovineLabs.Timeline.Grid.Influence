@@ -9,6 +9,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public float CellSize;
         public float3 PlaneNormal;
         public int ChunkSizePowerOfTwo;
+        public uint ChunkRetentionFrames;
     }
 
     public struct GridBasis
@@ -20,18 +21,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public GridBasis(float3 normal)
         {
             Normal = math.normalizesafe(normal, math.up());
-            
-            // Generate robust tangents
-            if (math.abs(math.dot(Normal, math.up())) > 0.99f)
-            {
-                Forward = math.forward();
-                Right = math.right();
-            }
-            else
-            {
-                Right = math.normalize(math.cross(math.up(), Normal));
-                Forward = math.cross(Normal, Right);
-            }
+
+            // Pick a reference vector that is not parallel to the normal, then build an
+            // orthonormal basis for every normal instead of special-casing near-vertical planes.
+            float3 reference = math.abs(math.dot(Normal, math.up())) > 0.99f
+                ? math.forward()
+                : math.up();
+
+            Right = math.normalizesafe(math.cross(reference, Normal), math.right());
+            Forward = math.normalize(math.cross(Normal, Right));
         }
 
         public float2 ToGridSpace(float3 worldPos)

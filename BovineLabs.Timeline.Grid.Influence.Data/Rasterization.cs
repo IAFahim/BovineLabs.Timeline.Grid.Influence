@@ -1,136 +1,11 @@
 using System.Runtime.CompilerServices;
-using Unity.Burst;
 using Unity.Collections;
 using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data
 {
-    [BurstCompile(FloatMode = FloatMode.Fast, OptimizeFor = OptimizeFor.Performance)]
     public static class Rasterizer
     {
-        public static AlignedRect Bounds(InfluenceShape shape, int2 origin)
-        {
-            switch (shape.Kind)
-            {
-                case ShapeKind.SolidRect:
-                {
-                    if (shape.RectSize.x <= 0 || shape.RectSize.y <= 0)
-                    {
-                        return new AlignedRect(origin, origin);
-                    }
-
-                    int2 min = origin + shape.RectMin;
-                    return new AlignedRect(min, min + shape.RectSize);
-                }
-
-                case ShapeKind.RectShell:
-                {
-                    if (shape.ShellSize.x <= 0 || shape.ShellSize.y <= 0 || shape.ShellThickness <= 0)
-                    {
-                        return new AlignedRect(origin, origin);
-                    }
-
-                    int2 min = origin + shape.ShellMin;
-                    return new AlignedRect(min, min + shape.ShellSize);
-                }
-
-                case ShapeKind.Disc:
-                {
-                    int radius = shape.DiscRadius;
-                    if (radius < 0)
-                    {
-                        return new AlignedRect(origin, origin);
-                    }
-
-                    int2 center = origin + shape.DiscCenter;
-                    return new AlignedRect(
-                        center - new int2(radius, radius),
-                        center + new int2(radius + 1, radius + 1));
-                }
-
-                case ShapeKind.Annulus:
-                {
-                    int outer = shape.AnnulusOuter;
-                    int inner = shape.AnnulusInner;
-                    if (outer < 0 || inner >= outer)
-                    {
-                        return new AlignedRect(origin, origin);
-                    }
-
-                    int2 center = origin + shape.AnnulusCenter;
-                    return new AlignedRect(
-                        center - new int2(outer, outer),
-                        center + new int2(outer + 1, outer + 1));
-                }
-
-                case ShapeKind.Capsule:
-                {
-                    int radius = shape.CapsuleRadius;
-                    if (radius < 0)
-                    {
-                        return new AlignedRect(origin, origin);
-                    }
-
-                    int2 a = origin + shape.CapsuleA;
-                    int2 b = origin + shape.CapsuleB;
-                    int2 min = math.min(a, b) - new int2(radius, radius);
-                    int2 max = math.max(a, b) + new int2(radius + 1, radius + 1);
-                    return new AlignedRect(min, max);
-                }
-
-                default:
-                    return new AlignedRect(origin, origin);
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int EstimateRectCount(Stamp stamp)
-        {
-            InfluenceShape shape = stamp.Shape;
-
-            switch (shape.Kind)
-            {
-                case ShapeKind.SolidRect:
-                    return shape.RectSize.x > 0 && shape.RectSize.y > 0 ? 1 : 0;
-
-                case ShapeKind.RectShell:
-                    if (shape.ShellSize.x <= 0 || shape.ShellSize.y <= 0 || shape.ShellThickness <= 0)
-                    {
-                        return 0;
-                    }
-
-                    int2 inner = shape.ShellSize - new int2(2 * shape.ShellThickness, 2 * shape.ShellThickness);
-                    return inner.x > 0 && inner.y > 0 ? 2 : 1;
-
-                case ShapeKind.Disc:
-                    return DiscRowCount(shape.DiscRadius);
-
-                case ShapeKind.Annulus:
-                    if (shape.AnnulusOuter < 0 || shape.AnnulusInner >= shape.AnnulusOuter)
-                    {
-                        return 0;
-                    }
-
-                    return SaturatingAdd(
-                        DiscRowCount(shape.AnnulusOuter),
-                        shape.AnnulusInner >= 0 ? DiscRowCount(shape.AnnulusInner) : 0);
-
-                case ShapeKind.Capsule:
-                    if (shape.CapsuleRadius < 0)
-                    {
-                        return 0;
-                    }
-
-                    int minY = math.min(shape.CapsuleA.y, shape.CapsuleB.y);
-                    int maxY = math.max(shape.CapsuleA.y, shape.CapsuleB.y);
-                    long rows = (long)maxY - minY + 2L * shape.CapsuleRadius + 1L;
-                    return ClampToInt(rows);
-
-                default:
-                    return 0;
-            }
-        }
-        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Emit(Stamp stamp, ref NativeList<WorldRect> output)
         {
@@ -160,29 +35,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     EmitCapsule(ref output, origin + shape.CapsuleA, origin + shape.CapsuleB, shape.CapsuleRadius, weight);
                     break;
             }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static int DiscRowCount(int radius)
-        {
-            if (radius < 0) return 0;
-            long rows = 2L * radius + 1L;
-            return ClampToInt(rows);
-        }
-        
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static int SaturatingAdd(int a, int b)
-        {
-            long sum = (long)a + b;
-            return ClampToInt(sum);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static int ClampToInt(long value)
-        {
-            if (value <= 0) return 0;
-
-            return value > int.MaxValue ? int.MaxValue : (int)value;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -234,45 +86,44 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             if (radius < 0) return;
 
-            float2 endA = new float2(a.x, a.y);
-            float2 endB = new float2(b.x, b.y);
-            float2 axis = endB - endA;
-            float axisLengthSquared = math.dot(axis, axis);
-
-            if (axisLengthSquared <= 0f)
+            if (math.all(a == b))
             {
                 EmitDisc(ref output, a, radius, weight);
                 return;
             }
 
-            float r = radius;
-            float2 normal = new float2(-axis.y, axis.x) * (math.rsqrt(axisLengthSquared) * r);
-            float2 c0 = endA + normal;
-            float2 c1 = endA - normal;
-            float2 c2 = endB - normal;
-            float2 c3 = endB + normal;
-
-            int yMin = (int)math.floor(math.min(endA.y, endB.y) - r);
-            int yMax = (int)math.ceil(math.max(endA.y, endB.y) + r);
-            const float boundary = 1e-4f;
+            int xMin = math.min(a.x, b.x) - radius;
+            int xMax = math.max(a.x, b.x) + radius;
+            int yMin = math.min(a.y, b.y) - radius;
+            int yMax = math.max(a.y, b.y) + radius;
+            long radiusSquared = (long)radius * radius;
 
             for (int y = yMin; y <= yMax; y++)
             {
-                float row = y;
-                float lo = float.MaxValue;
-                float hi = float.MinValue;
                 bool covered = false;
+                int xStart = 0;
+                int xEnd = 0;
 
-                covered |= DiscRow(endA, r, row, ref lo, ref hi);
-                covered |= DiscRow(endB, r, row, ref lo, ref hi);
-                covered |= CoreRow(c0, c1, c2, c3, row, ref lo, ref hi);
+                for (int x = xMin; x <= xMax; x++)
+                {
+                    bool inside = PointSegmentDistanceLessOrEqualRadiusSquared(new int2(x, y), a, b, radiusSquared);
+
+                    if (!inside)
+                    {
+                        if (covered) break;
+                        continue;
+                    }
+
+                    if (!covered)
+                    {
+                        xStart = x;
+                        covered = true;
+                    }
+
+                    xEnd = x;
+                }
 
                 if (!covered) continue;
-
-                int xStart = (int)math.ceil(lo - boundary);
-                int xEnd = (int)math.floor(hi + boundary);
-
-                if (xStart > xEnd) continue;
 
                 output.Add(new WorldRect(
                     new AlignedRect(new int2(xStart, y), new int2(xEnd + 1, y + 1)),
@@ -281,41 +132,57 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static bool DiscRow(float2 center, float radius, float row, ref float lo, ref float hi)
+        static bool PointSegmentDistanceLessOrEqualRadiusSquared(int2 p, int2 a, int2 b, long radiusSquared)
         {
-            float dy = row - center.y;
-            if (math.abs(dy) > radius) return false;
+            long abx = (long)b.x - a.x;
+            long aby = (long)b.y - a.y;
+            long apx = (long)p.x - a.x;
+            long apy = (long)p.y - a.y;
+            long lenSquared = abx * abx + aby * aby;
+            long dot = apx * abx + apy * aby;
 
-            float half = math.sqrt(radius * radius - dy * dy);
-            lo = math.min(lo, center.x - half);
-            hi = math.max(hi, center.x + half);
-            return true;
+            if (dot <= 0)
+            {
+                return SquaredLengthLessOrEqual(apx, apy, radiusSquared);
+            }
+
+            if (dot >= lenSquared)
+            {
+                long bpx = (long)p.x - b.x;
+                long bpy = (long)p.y - b.y;
+                return SquaredLengthLessOrEqual(bpx, bpy, radiusSquared);
+            }
+
+            long cross = abx * apy - aby * apx;
+            return SquareLessOrEqualProduct(cross, radiusSquared, lenSquared);
         }
 
-        static bool CoreRow(float2 p0, float2 p1, float2 p2, float2 p3, float row, ref float lo, ref float hi)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static bool SquaredLengthLessOrEqual(long x, long y, long radiusSquared)
         {
-            bool hit = false;
-            hit |= EdgeCrossing(p0, p1, row, ref lo, ref hi);
-            hit |= EdgeCrossing(p1, p2, row, ref lo, ref hi);
-            hit |= EdgeCrossing(p2, p3, row, ref lo, ref hi);
-            hit |= EdgeCrossing(p3, p0, row, ref lo, ref hi);
-            return hit;
+            return x * x + y * y <= radiusSquared;
         }
 
-        static bool EdgeCrossing(float2 p, float2 q, float row, ref float lo, ref float hi)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static bool SquareLessOrEqualProduct(long value, long a, long b)
         {
-            float y0 = p.y;
-            float y1 = q.y;
+            long absValue = value < 0 ? -value : value;
 
-            if (y0 == y1) return false;
+            // In normal gameplay ranges this remains entirely integer-exact. The fallback
+            // keeps extreme authored coordinates from wrapping silently.
+            if (WouldMultiplyOverflow(absValue, absValue) || WouldMultiplyOverflow(a, b))
+            {
+                return (double)absValue * absValue <= (double)a * b;
+            }
 
-            float t = (row - y0) / (y1 - y0);
-            if (t < 0f || t > 1f) return false;
+            return absValue * absValue <= a * b;
+        }
 
-            float x = p.x + (q.x - p.x) * t;
-            lo = math.min(lo, x);
-            hi = math.max(hi, x);
-            return true;
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static bool WouldMultiplyOverflow(long a, long b)
+        {
+            if (a == 0 || b == 0) return false;
+            return a > long.MaxValue / b;
         }
     }
 }

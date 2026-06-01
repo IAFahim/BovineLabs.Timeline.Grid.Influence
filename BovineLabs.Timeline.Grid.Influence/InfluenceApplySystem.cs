@@ -25,14 +25,37 @@ namespace BovineLabs.Timeline.Grid.Influence
             _activeQuery = SystemAPI.QueryBuilder()
                 .WithAll<InfluenceClipData, TrackBinding, ClipActive>()
                 .Build();
+
+            if (!SystemAPI.HasSingleton<InfluenceGridDependency>())
+            {
+                var entity = state.EntityManager.CreateEntity();
+                state.EntityManager.AddComponentData(entity, new InfluenceGridDependency());
+            }
+
+            if (!SystemAPI.HasSingleton<InfluenceGridComponent>())
+            {
+                var entity = state.EntityManager.CreateEntity();
+                state.EntityManager.AddComponentData(entity, new InfluenceGridComponent());
+            }
         }
 
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
+            if (SystemAPI.TryGetSingleton<InfluenceGridDependency>(out var gridDependency))
+            {
+                gridDependency.Value.Complete();
+            }
+
+            state.Dependency.Complete();
+
             if (SystemAPI.TryGetSingletonRW<InfluenceGridComponent>(out var gridComp))
             {
-                gridComp.ValueRW.Grid.Dispose();
+                if (gridComp.ValueRO.Grid.IsCreated)
+                {
+                    gridComp.ValueRW.Grid.Dispose();
+                    gridComp.ValueRW.Grid = default;
+                }
             }
         }
 
@@ -41,18 +64,37 @@ namespace BovineLabs.Timeline.Grid.Influence
         {
             var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
 
-            // Lazily allocate the grid as soon as settings exist
-            if (!SystemAPI.TryGetSingletonRW<InfluenceGridComponent>(out var gridRw))
+            var gridDependencyRw = SystemAPI.GetSingletonRW<InfluenceGridDependency>();
+            state.Dependency = JobHandle.CombineDependencies(
+                state.Dependency,
+                gridDependencyRw.ValueRO.Value);
+
+            var gridRw = SystemAPI.GetSingletonRW<InfluenceGridComponent>();
+
+            if (!gridRw.ValueRO.Grid.IsCreated)
             {
-                var newGrid = InfluenceGrid.Create(settings.ChunkSizePowerOfTwo, Allocator.Persistent);
-                var entity = state.EntityManager.CreateEntity();
-                state.EntityManager.AddComponentData(entity, new InfluenceGridComponent { Grid = newGrid });
-                return; // initialized, defer logic to next frame
+                gridRw.ValueRW.Grid = InfluenceGrid.Create(
+                    settings.ChunkSizePowerOfTwo,
+                    settings.ChunkRetentionFrames,
+                    Allocator.Persistent);
+
+                gridDependencyRw.ValueRW.Value = state.Dependency;
+                return;
             }
 
             var grid = gridRw.ValueRW.Grid;
+
             var count = _activeQuery.CalculateEntityCountWithoutFiltering();
-            if (count == 0) return;
+            if (count == 0)
+            {
+                state.Dependency = new BeginFrameJob
+                {
+                    Grid = grid
+                }.Schedule(state.Dependency);
+
+                gridDependencyRw.ValueRW.Value = state.Dependency;
+                return;
+            }
 
             var stamps = new NativeList<Stamp>(count, state.WorldUpdateAllocator);
             var basis = new GridBasis(settings.PlaneNormal);
@@ -78,6 +120,8 @@ namespace BovineLabs.Timeline.Grid.Influence
                 Stride = grid.Stride,
                 Dimension = grid.Dimension
             }.Schedule(grid.ActiveChunks, 1, state.Dependency);
+
+            gridDependencyRw.ValueRW.Value = state.Dependency;
         }
 
         [BurstCompile]
@@ -107,6 +151,17 @@ namespace BovineLabs.Timeline.Grid.Influence
         }
 
         [BurstCompile]
+        private struct BeginFrameJob : IJob
+        {
+            public InfluenceGrid Grid;
+
+            public void Execute()
+            {
+                Grid.BeginFrame();
+            }
+        }
+
+        [BurstCompile]
         private struct ScatterJob : IJob
         {
             [ReadOnly] public NativeArray<Stamp> Stamps;
@@ -114,14 +169,7 @@ namespace BovineLabs.Timeline.Grid.Influence
 
             public void Execute()
             {
-                Grid.ActiveChunks.Clear();
-                Grid.FrameId.Value++;
-                if (Grid.FrameId.Value == 0) // overflow
-                {
-                    for(int i = 0; i < Grid.ChunkLastWrittenFrame.Length; i++)
-                        Grid.ChunkLastWrittenFrame[i] = 0;
-                    Grid.FrameId.Value = 1;
-                }
+                Grid.BeginFrame();
 
                 var rects = new NativeList<WorldRect>(Stamps.Length * 2, Allocator.Temp);
                 for (int i = 0; i < Stamps.Length; i++)
@@ -147,14 +195,7 @@ namespace BovineLabs.Timeline.Grid.Influence
                         for (int cx = cx0; cx <= cx1; cx++)
                         {
                             var coord = new int2(cx, cy);
-                            if (!Grid.ChunkIndex.TryGetValue(coord, out int slotIdx))
-                            {
-                                slotIdx = Grid.ChunkCoords.Length;
-                                Grid.ChunkCoords.Add(coord);
-                                Grid.ChunkLastWrittenFrame.Add(0);
-                                Grid.ChunkData.ResizeUninitialized(Grid.ChunkData.Length + elementsPerChunk);
-                                Grid.ChunkIndex.Add(coord, slotIdx);
-                            }
+                            int slotIdx = Grid.GetOrCreateChunkSlot(coord, elementsPerChunk);
 
                             if (Grid.ChunkLastWrittenFrame[slotIdx] != Grid.FrameId.Value)
                             {
@@ -167,8 +208,8 @@ namespace BovineLabs.Timeline.Grid.Influence
                                 Grid.ActiveChunks.Add(slotIdx);
                             }
 
-                            int baseX = cx << Grid.Log2;
-                            int baseY = cy << Grid.Log2;
+                            int baseX = IntegerMath.ShiftLeftSaturating(cx, Grid.Log2);
+                            int baseY = IntegerMath.ShiftLeftSaturating(cy, Grid.Log2);
                             int lx0 = math.max(bounds.Min.x, baseX) - baseX;
                             int ly0 = math.max(bounds.Min.y, baseY) - baseY;
                             int lx1 = math.min(bounds.Max.x, baseX + Grid.ChunkSize) - baseX;
@@ -177,15 +218,19 @@ namespace BovineLabs.Timeline.Grid.Influence
                             if (lx0 >= lx1 || ly0 >= ly1) continue;
 
                             int baseDataIdx = slotIdx * elementsPerChunk;
-                            
-                            Grid.ChunkData[baseDataIdx + ly0 * Grid.Stride + lx0] += weight;
-                            Grid.ChunkData[baseDataIdx + ly0 * Grid.Stride + lx1] -= weight;
-                            Grid.ChunkData[baseDataIdx + ly1 * Grid.Stride + lx0] -= weight;
-                            Grid.ChunkData[baseDataIdx + ly1 * Grid.Stride + lx1] += weight;
+                            AddDifference(ref Grid, baseDataIdx + ly0 * Grid.Stride + lx0, weight);
+                            AddDifference(ref Grid, baseDataIdx + ly0 * Grid.Stride + lx1, -weight);
+                            AddDifference(ref Grid, baseDataIdx + ly1 * Grid.Stride + lx0, -weight);
+                            AddDifference(ref Grid, baseDataIdx + ly1 * Grid.Stride + lx1, weight);
                         }
                     }
                 }
                 rects.Dispose();
+            }
+
+            private static void AddDifference(ref InfluenceGrid grid, int index, int delta)
+            {
+                grid.ChunkData[index] = IntegerMath.SaturatingAdd(grid.ChunkData[index], delta);
             }
         }
 

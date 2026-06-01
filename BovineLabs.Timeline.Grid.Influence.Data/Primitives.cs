@@ -45,5 +45,25 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             while (root * root > value) root--;
             return root > int.MaxValue ? int.MaxValue : (int)root;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int SaturatingAdd(int a, int b)
+        {
+            long value = (long)a + b;
+            if (value > int.MaxValue) return int.MaxValue;
+            if (value < int.MinValue) return int.MinValue;
+            return (int)value;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int ShiftLeftSaturating(int value, int shift)
+        {
+            if (shift <= 0) return value;
+
+            long shifted = (long)value << shift;
+            if (shifted > int.MaxValue) return int.MaxValue;
+            if (shifted < int.MinValue) return int.MinValue;
+            return (int)shifted;
+        }
     }
 }

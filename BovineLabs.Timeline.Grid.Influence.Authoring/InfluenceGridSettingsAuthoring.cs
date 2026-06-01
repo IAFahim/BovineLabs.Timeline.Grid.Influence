@@ -16,9 +16,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         [Tooltip("Normal vector of the grid plane.")]
         public Vector3 PlaneNormal = Vector3.up;
 
-        [Tooltip("Power of two for chunk size (e.g., 4 = 16x16 chunks).")]
+        [Tooltip("Power of two exponent for chunk size (e.g., 4 = 16x16 chunks).")]
         [Range(1, 8)]
         public int ChunkSizePowerOfTwo = 4;
+
+        [Tooltip("Number of frames to retain inactive chunks before their slots can be reused.")]
+        [Min(0)]
+        public int ChunkRetentionFrames = 300;
 
         public override void Bake(Baker<SettingsAuthoring> baker)
         {
@@ -27,7 +31,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             {
                 CellSize = math.max(0.01f, CellSize),
                 PlaneNormal = math.normalizesafe(PlaneNormal, math.up()),
-                ChunkSizePowerOfTwo = ChunkSizePowerOfTwo
+                ChunkSizePowerOfTwo = ChunkSizePowerOfTwo,
+                ChunkRetentionFrames = (uint)math.max(0, ChunkRetentionFrames)
             });
         }
     }

@@ -13,23 +13,33 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public NativeList<uint> ChunkLastWrittenFrame;
         public NativeList<int> ChunkData;
         public NativeList<int> ActiveChunks;
+        public NativeList<int> FreeSlots;
         public NativeReference<uint> FrameId;
 
         public int ChunkSize;
         public int Log2;
         public int Stride;
         public int Dimension;
+        public uint ChunkRetentionFrames;
 
         public bool IsCreated => ChunkIndex.IsCreated;
 
         public static InfluenceGrid Create(int chunkSizePowerOfTwo, Allocator allocator)
         {
-            if (chunkSizePowerOfTwo <= 0 || (chunkSizePowerOfTwo & (chunkSizePowerOfTwo - 1)) != 0)
+            return Create(chunkSizePowerOfTwo, 300, allocator);
+        }
+
+        public static InfluenceGrid Create(int chunkSizePowerOfTwo, uint chunkRetentionFrames, Allocator allocator)
+        {
+            if (chunkSizePowerOfTwo < 1 || chunkSizePowerOfTwo > 8)
             {
-                throw new ArgumentOutOfRangeException(nameof(chunkSizePowerOfTwo), "Chunk size must be a positive power of two.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(chunkSizePowerOfTwo),
+                    "Chunk size power must be an exponent in the range [1, 8].");
             }
 
-            int dimension = chunkSizePowerOfTwo + 1;
+            int chunkSize = 1 << chunkSizePowerOfTwo;
+            int dimension = chunkSize + 1;
             int stride = (dimension + 7) & ~7;
 
             return new InfluenceGrid
@@ -39,11 +49,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 ChunkLastWrittenFrame = new NativeList<uint>(64, allocator),
                 ChunkData = new NativeList<int>(64 * stride * dimension, allocator),
                 ActiveChunks = new NativeList<int>(64, allocator),
+                FreeSlots = new NativeList<int>(64, allocator),
                 FrameId = new NativeReference<uint>(1, allocator),
-                ChunkSize = chunkSizePowerOfTwo,
-                Log2 = math.tzcnt(chunkSizePowerOfTwo),
+                ChunkSize = chunkSize,
+                Log2 = chunkSizePowerOfTwo,
                 Stride = stride,
-                Dimension = dimension
+                Dimension = dimension,
+                ChunkRetentionFrames = chunkRetentionFrames
             };
         }
 
@@ -54,7 +66,46 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             if (ChunkLastWrittenFrame.IsCreated) ChunkLastWrittenFrame.Dispose();
             if (ChunkData.IsCreated) ChunkData.Dispose();
             if (ActiveChunks.IsCreated) ActiveChunks.Dispose();
+            if (FreeSlots.IsCreated) FreeSlots.Dispose();
             if (FrameId.IsCreated) FrameId.Dispose();
+        }
+
+        public void BeginFrame()
+        {
+            ActiveChunks.Clear();
+            FrameId.Value++;
+
+            if (FrameId.Value == 0) // overflow
+            {
+                ResetFrameIdsAfterOverflow();
+            }
+
+            EvictInactiveChunks();
+        }
+
+        public int GetOrCreateChunkSlot(int2 coord, int elementsPerChunk)
+        {
+            if (ChunkIndex.TryGetValue(coord, out int slotIdx)) return slotIdx;
+
+            if (FreeSlots.Length > 0)
+            {
+                int lastFree = FreeSlots.Length - 1;
+                slotIdx = FreeSlots[lastFree];
+                FreeSlots.RemoveAtSwapBack(lastFree);
+
+                ChunkCoords[slotIdx] = coord;
+                ChunkLastWrittenFrame[slotIdx] = 0;
+            }
+            else
+            {
+                slotIdx = ChunkCoords.Length;
+                ChunkCoords.Add(coord);
+                ChunkLastWrittenFrame.Add(0);
+                ChunkData.ResizeUninitialized(ChunkData.Length + elementsPerChunk);
+            }
+
+            ChunkIndex.Add(coord, slotIdx);
+            return slotIdx;
         }
 
         public ChunkView GetChunkView(int2 coord)
@@ -68,11 +119,44 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 return new ChunkView
                 {
                     Field = field,
-                    Base = new int2(coord.x << Log2, coord.y << Log2),
+                    Base = new int2(
+                        IntegerMath.ShiftLeftSaturating(coord.x, Log2),
+                        IntegerMath.ShiftLeftSaturating(coord.y, Log2)),
                     Stride = Stride,
                     ChunkSize = ChunkSize
                 };
             }
+        }
+
+        private void EvictInactiveChunks()
+        {
+            if (ChunkRetentionFrames == uint.MaxValue) return;
+
+            uint currentFrame = FrameId.Value;
+            for (int slotIdx = 0; slotIdx < ChunkLastWrittenFrame.Length; slotIdx++)
+            {
+                uint lastWrittenFrame = ChunkLastWrittenFrame[slotIdx];
+                if (lastWrittenFrame == 0) continue;
+                if (currentFrame - lastWrittenFrame <= ChunkRetentionFrames) continue;
+
+                ChunkIndex.Remove(ChunkCoords[slotIdx]);
+                ChunkLastWrittenFrame[slotIdx] = 0;
+                FreeSlots.Add(slotIdx);
+            }
+        }
+
+        private void ResetFrameIdsAfterOverflow()
+        {
+            ChunkIndex.Clear();
+            FreeSlots.Clear();
+
+            for (int i = 0; i < ChunkLastWrittenFrame.Length; i++)
+            {
+                ChunkLastWrittenFrame[i] = 0;
+                FreeSlots.Add(i);
+            }
+
+            FrameId.Value = 1;
         }
     }
 

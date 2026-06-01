@@ -43,6 +43,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         [UnityEngine.Tooltip("Second endpoint of the capsule (grid coordinates).")]
         public UnityEngine.Vector2Int capsuleB = new UnityEngine.Vector2Int(3, 5);
 
+        [UnityEngine.Tooltip("Capsule radius in grid cells.")]
+        public int capsuleRadius = 5;
+
         [UnityEngine.Header("Transform")]
         [UnityEngine.Tooltip("Local offset from the entity's world position.")]
         public UnityEngine.Vector3 localOffset;
@@ -91,7 +94,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                     shape = InfluenceShape.Capsule(
                         new int2(capsuleA.x, capsuleA.y),
                         new int2(capsuleB.x, capsuleB.y),
-                        outerRadius,
+                        capsuleRadius,
                         weight);
                     break;
             }

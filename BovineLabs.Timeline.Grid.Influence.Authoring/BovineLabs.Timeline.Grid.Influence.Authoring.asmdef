@@ -17,6 +17,7 @@
     "Unity.Entities",
     "Unity.Entities.Hybrid",
     "Unity.Timeline",
+    "UnityEngine",
     "Unity.Burst"
   ],
   "includePlatforms": [],

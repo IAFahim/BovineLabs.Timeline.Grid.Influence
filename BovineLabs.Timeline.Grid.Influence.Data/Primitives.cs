@@ -1,10 +1,7 @@
-using System.Runtime.CompilerServices;
-using Unity.Burst;
 using Unity.Mathematics;
 
-namespace BovineLabs.Timeline.Grid.Influence
+namespace BovineLabs.Timeline.Grid.Influence.Data
 {
-    [BurstCompile]
     public readonly struct AlignedRect
     {
         public readonly int2 Min;
@@ -16,14 +13,9 @@ namespace BovineLabs.Timeline.Grid.Influence
             Max = max;
         }
 
-        public bool IsEmpty
-        {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => Max.x <= Min.x || Max.y <= Min.y;
-        }
+        public bool IsEmpty => Max.x <= Min.x || Max.y <= Min.y;
     }
 
-    [BurstCompile]
     public readonly struct WorldRect
     {
         public readonly AlignedRect Bounds;
@@ -38,14 +30,26 @@ namespace BovineLabs.Timeline.Grid.Influence
 
     public static class IntegerMath
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int FloorSqrt(int value)
+        public static int FloorSqrt(long value)
         {
-            if (value <= 0) return 0;
-            int root = (int)math.sqrt((double)value);
-            while ((long)(root + 1) * (root + 1) <= value) root++;
-            while ((long)root * root > value) root--;
-            return root;
+            if (value <= 0)
+            {
+                return 0;
+            }
+
+            long root = (long)math.sqrt((double)value);
+
+            while ((root + 1) * (root + 1) <= value)
+            {
+                root++;
+            }
+
+            while (root * root > value)
+            {
+                root--;
+            }
+
+            return root > int.MaxValue ? int.MaxValue : (int)root;
         }
     }
 }

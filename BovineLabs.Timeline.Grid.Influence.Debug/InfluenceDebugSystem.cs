@@ -63,8 +63,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         {
             state.RequireForUpdate<DrawSystem.Singleton>();
             state.RequireForUpdate<InfluenceGridSettings>();
-            state.RequireForUpdate<InfluenceGridDependency>();
-            
+            state.RequireForUpdate<InfluenceFieldDependency>();
+
             _query = SystemAPI.QueryBuilder()
                 .WithAll<TrackBinding, InfluenceClipData, ClipActive>()
                 .Build();
@@ -96,13 +96,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             bool drawGrid = InfluenceDebugSystemConfig.DrawGrid.Data;
             bool drawValues = InfluenceDebugSystemConfig.DrawValues.Data;
 
-            if ((drawGrid || drawValues) && SystemAPI.TryGetSingleton<InfluenceGridComponent>(out var gridComp))
+            if ((drawGrid || drawValues) && SystemAPI.TryGetSingleton<InfluenceFieldSingleton>(out var fieldComp))
             {
-                var grid = gridComp.Grid;
-                if (grid.IsCreated && grid.ActiveChunks.IsCreated)
+                var field = fieldComp.Field;
+                if (field.IsCreated)
                 {
-                    var gridDependencyRw = SystemAPI.GetSingletonRW<InfluenceGridDependency>();
-                    state.Dependency = JobHandle.CombineDependencies(state.Dependency, gridDependencyRw.ValueRO.Value);
+                    var dependencyRw = SystemAPI.GetSingletonRW<InfluenceFieldDependency>();
+                    state.Dependency = JobHandle.CombineDependencies(state.Dependency, dependencyRw.ValueRO.Value);
 
                     state.Dependency = new DrawGridJob
                     {
@@ -114,15 +114,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                         Basis         = basis,
                         DrawGrid      = drawGrid,
                         DrawValues    = drawValues,
-                        ActiveChunks  = grid.ActiveChunks.AsDeferredJobArray(),
-                        ChunkCoords   = grid.ChunkCoords.AsDeferredJobArray(),
-                        ChunkData     = grid.ChunkData.AsDeferredJobArray(),
-                        ChunkSize     = grid.ChunkSize,
-                        Stride        = grid.Stride,
-                        Dimension     = grid.Dimension
+                        ActiveSlots   = field.ActiveSlots,
+                        CoordBySlot   = field.CoordBySlot,
+                        Data          = field.Data,
+                        ChunkSize     = field.ChunkSize,
+                        Stride        = field.Stride,
+                        Dimension     = field.Dimension
                     }.Schedule(state.Dependency);
 
-                    gridDependencyRw.ValueRW.Value = state.Dependency;
+                    dependencyRw.ValueRW.Value = state.Dependency;
                 }
             }
         }
@@ -144,7 +144,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     return;
 
                 var shape = active.Shape;
-                
+
                 var color = shape.Weight >= 0 ? PositiveColor : NegativeColor;
                 color.a *= 0.8f;
 
@@ -189,7 +189,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 }
 
                 Drawer.Point(snappedWorldOrigin, 0.1f * CellSize, color);
-                
+
                 FixedString32Bytes label = default;
                 label.Append("Wt: ");
                 label.Append(shape.Weight);
@@ -199,7 +199,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             private void DrawRectWireframe(float3 localOrigin, int2 min, int2 size, Color color, float heightOffset)
             {
                 if (size.x <= 0 || size.y <= 0) return;
-                
+
                 var startGridPos = Basis.ToGridSpace(localOrigin) + new float2(min.x * CellSize, min.y * CellSize);
                 startGridPos -= new float2(CellSize * 0.5f, CellSize * 0.5f);
 
@@ -219,7 +219,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 if (radius < 0) return;
                 var centerGridPos = Basis.ToGridSpace(localOrigin) + new float2(center.x * CellSize, center.y * CellSize);
                 var worldCenter = Basis.ToWorldSpace(centerGridPos, heightOffset);
-                
+
                 var r = (radius + 0.5f) * CellSize;
                 Drawer.Circle(worldCenter, Basis.Normal * r, color);
             }
@@ -227,7 +227,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             private void DrawCapsuleWireframe(float3 localOrigin, int2 a, int2 b, int radius, Color color, float heightOffset)
             {
                 if (radius < 0) return;
-                
+
                 var localGridSpace = Basis.ToGridSpace(localOrigin);
                 var centerA = Basis.ToWorldSpace(localGridSpace + new float2(a.x * CellSize, a.y * CellSize), heightOffset);
                 var centerB = Basis.ToWorldSpace(localGridSpace + new float2(b.x * CellSize, b.y * CellSize), heightOffset);
@@ -258,9 +258,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             public bool DrawGrid;
             public bool DrawValues;
 
-            [ReadOnly] public NativeArray<int> ActiveChunks;
-            [ReadOnly] public NativeArray<int2> ChunkCoords;
-            [ReadOnly] public NativeArray<int> ChunkData;
+            [ReadOnly] public NativeArray<int> ActiveSlots;
+            [ReadOnly] public NativeArray<int2> CoordBySlot;
+            [ReadOnly] public NativeArray<int> Data;
 
             public int ChunkSize;
             public int Stride;
@@ -270,14 +270,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             {
                 float renderHeightOffset = 0.05f;
 
-                for (int i = 0; i < ActiveChunks.Length; i++)
+                for (int i = 0; i < ActiveSlots.Length; i++)
                 {
-                    int slotIdx = ActiveChunks[i];
-                    int2 coord = ChunkCoords[slotIdx];
+                    int slotIdx = ActiveSlots[i];
+                    int2 coord = CoordBySlot[slotIdx];
                     int baseDataIdx = slotIdx * Stride * Dimension;
 
                     float2 chunkGridOrigin = new float2(coord.x * ChunkSize, coord.y * ChunkSize) * CellSize;
-                    
+
                     if (DrawGrid)
                     {
                         float3 p0 = Basis.ToWorldSpace(chunkGridOrigin, renderHeightOffset);
@@ -297,7 +297,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                         {
                             for (int x = 0; x < ChunkSize; x++)
                             {
-                                int val = ChunkData[baseDataIdx + y * Stride + x];
+                                int val = Data[baseDataIdx + y * Stride + x];
                                 if (val == 0) continue;
 
                                 float2 cellGridPos = chunkGridOrigin + new float2(x * CellSize, y * CellSize);
@@ -305,7 +305,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                                 float3 worldCenter = Basis.ToWorldSpace(cellCenter, renderHeightOffset);
 
                                 Color cellColor = val > 0 ? PositiveColor : NegativeColor;
-                                
+
                                 float intensity = math.clamp(math.abs(val) / 10f, 0.15f, 0.75f);
                                 Color quadColor = cellColor;
                                 quadColor.a *= intensity;
@@ -317,7 +317,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                                 float3 c3 = Basis.ToWorldSpace(cellGridPos + new float2(pad, CellSize - pad), renderHeightOffset);
 
                                 Drawer.Quad(c0, c1, c2, c3, quadColor);
-                                
+
                                 FixedString32Bytes text = default;
                                 text.Append(val);
                                 Drawer.Text32(worldCenter, text, cellColor, 12f);

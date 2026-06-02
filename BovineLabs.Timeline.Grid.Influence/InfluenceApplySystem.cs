@@ -70,11 +70,12 @@ namespace BovineLabs.Timeline.Grid.Influence
             }
 
             int count = _activeQuery.CalculateEntityCount();
+            JobHandle publishedDependency = dependencyRw.ValueRO.Value;
 
             JobHandle handle;
             if (count == 0)
             {
-                handle = field.ScheduleBatched(default);
+                handle = field.ScheduleBatched(default, publishedDependency);
             }
             else
             {
@@ -90,7 +91,7 @@ namespace BovineLabs.Timeline.Grid.Influence
 
                 gather.Complete();
 
-                handle = field.ScheduleBatched(stamps.AsArray());
+                handle = field.ScheduleBatched(stamps.AsArray(), publishedDependency);
             }
 
             fieldRw.ValueRW.Field = field;

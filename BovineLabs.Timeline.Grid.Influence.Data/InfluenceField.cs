@@ -45,9 +45,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public int Dimension => _dimension;
         public uint FrameId => _frameId;
 
-        public NativeArray<int> ActiveSlots => _activeSlots.AsArray();
-        public NativeArray<int2> CoordBySlot => _coordBySlot.AsArray();
-        public NativeArray<int> Data => _data.AsArray();
+        public NativeArray<int> ActiveSlots => _activeSlots.AsDeferredJobArray();
+        public NativeArray<int2> CoordBySlot => _coordBySlot.AsDeferredJobArray();
+        public NativeArray<int> Data => _data.AsDeferredJobArray();
 
         public static InfluenceField Create(int chunkSize, uint retentionFrames, Allocator allocator)
         {

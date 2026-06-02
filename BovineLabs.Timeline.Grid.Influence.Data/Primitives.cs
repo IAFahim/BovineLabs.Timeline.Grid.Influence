@@ -7,7 +7,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
     {
         public readonly int2 Min;
         public readonly int2 Max;
-        
+
         public AlignedRect(int2 min, int2 max)
         {
             Min = min;
@@ -44,26 +44,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             while ((root + 1) * (root + 1) <= value) root++;
             while (root * root > value) root--;
             return root > int.MaxValue ? int.MaxValue : (int)root;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int SaturatingAdd(int a, int b)
-        {
-            long value = (long)a + b;
-            if (value > int.MaxValue) return int.MaxValue;
-            if (value < int.MinValue) return int.MinValue;
-            return (int)value;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int ShiftLeftSaturating(int value, int shift)
-        {
-            if (shift <= 0) return value;
-
-            long shifted = (long)value << shift;
-            if (shifted > int.MaxValue) return int.MaxValue;
-            if (shifted < int.MinValue) return int.MinValue;
-            return (int)shifted;
         }
     }
 }

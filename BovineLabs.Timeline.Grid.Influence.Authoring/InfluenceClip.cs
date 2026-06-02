@@ -56,56 +56,43 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
         public override void Bake(Entity clipEntity, BakingContext context)
         {
-            InfluenceShape shape = default;
-
-            switch (kind)
-            {
-                case ShapeKind.SolidRect:
-                    shape = InfluenceShape.SolidRect(
-                        new int2(rectMin.x, rectMin.y),
-                        new int2(rectSize.x, rectSize.y),
-                        weight);
-                    break;
-
-                case ShapeKind.RectShell:
-                    shape = InfluenceShape.RectShell(
-                        new int2(rectMin.x, rectMin.y),
-                        new int2(rectSize.x, rectSize.y),
-                        shellThickness,
-                        weight);
-                    break;
-
-                case ShapeKind.Disc:
-                    shape = InfluenceShape.Disc(
-                        new int2(circleCenter.x, circleCenter.y),
-                        outerRadius,
-                        weight);
-                    break;
-
-                case ShapeKind.Annulus:
-                    shape = InfluenceShape.Annulus(
-                        new int2(circleCenter.x, circleCenter.y),
-                        outerRadius,
-                        innerRadius,
-                        weight);
-                    break;
-
-                case ShapeKind.Capsule:
-                    shape = InfluenceShape.Capsule(
-                        new int2(capsuleA.x, capsuleA.y),
-                        new int2(capsuleB.x, capsuleB.y),
-                        capsuleRadius,
-                        weight);
-                    break;
-            }
-
             context.Baker.AddComponent(clipEntity, new InfluenceClipData
             {
-                Shape = shape,
+                Shape = BuildShape(),
                 LocalOffset = localOffset
             });
 
             base.Bake(clipEntity, context);
+        }
+
+        InfluenceShape BuildShape()
+        {
+            int2 rectMinCell = new int2(rectMin.x, rectMin.y);
+            int2 rectSizeCell = new int2(rectSize.x, rectSize.y);
+            int2 circleCenterCell = new int2(circleCenter.x, circleCenter.y);
+            int2 capsuleACell = new int2(capsuleA.x, capsuleA.y);
+            int2 capsuleBCell = new int2(capsuleB.x, capsuleB.y);
+
+            switch (kind)
+            {
+                case ShapeKind.SolidRect:
+                    return InfluenceShape.SolidRect(rectMinCell, rectSizeCell, weight);
+
+                case ShapeKind.RectShell:
+                    return InfluenceShape.RectShell(rectMinCell, rectSizeCell, shellThickness, weight);
+
+                case ShapeKind.Disc:
+                    return InfluenceShape.Disc(circleCenterCell, outerRadius, weight);
+
+                case ShapeKind.Annulus:
+                    return InfluenceShape.Annulus(circleCenterCell, outerRadius, innerRadius, weight);
+
+                case ShapeKind.Capsule:
+                    return InfluenceShape.Capsule(capsuleACell, capsuleBCell, capsuleRadius, weight);
+
+                default:
+                    return InfluenceShape.Disc(circleCenterCell, outerRadius, weight);
+            }
         }
     }
 }

@@ -50,9 +50,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public int CapsuleRadius => _i0;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public InfluenceShape WithWeight(int weight)
+            => new(Kind, weight, _v0, _v1, _i0, _i1);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static InfluenceShape SolidRect(int2 min, int2 size, int weight)
             => new(ShapeKind.SolidRect, weight, min, size, 0, 0);
-        
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static InfluenceShape RectShell(int2 min, int2 size, int thickness, int weight)
             => new(ShapeKind.RectShell, weight, min, size, thickness, 0);
@@ -80,5 +84,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             Shape = shape;
             Origin = origin;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public Stamp Negated() => new(Shape.WithWeight(-Shape.Weight), Origin);
     }
 }

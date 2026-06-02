@@ -1,8 +1,8 @@
+using Unity.Entities;
+using Unity.Mathematics;
+
 namespace BovineLabs.Timeline.Grid.Influence.Data
 {
-    using Unity.Entities;
-    using Unity.Mathematics;
-
     [System.Serializable]
     public struct InfluenceClipData : IComponentData
     {

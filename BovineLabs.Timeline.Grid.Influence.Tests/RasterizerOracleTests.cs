@@ -110,6 +110,65 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             }
         }
 
+        [Test]
+        public void SingleEllipseMatchesExactMembership()
+        {
+            AssertSceneMatchesOracleEverywhere(new[]
+            {
+                new Stamp(InfluenceShape.Ellipse(new int2(2, -1), new int2(4, 2), 3), int2.zero)
+            });
+        }
+
+        [Test]
+        public void RoundedRectRadiusOneRemovesOnlyCorners()
+        {
+            var expected = new System.Collections.Generic.List<int2>();
+
+            for (int y = 0; y < 5; y++)
+            {
+                for (int x = 0; x < 5; x++)
+                {
+                    bool corner =
+                        (x == 0 && y == 0) ||
+                        (x == 4 && y == 0) ||
+                        (x == 0 && y == 4) ||
+                        (x == 4 && y == 4);
+
+                    if (!corner)
+                    {
+                        expected.Add(new int2(x, y));
+                    }
+                }
+            }
+
+            AssertExactNonZeroSet(
+                new Stamp(InfluenceShape.RoundedRect(int2.zero, new int2(5, 5), 1, 1), int2.zero),
+                expected.ToArray());
+        }
+
+        [Test]
+        public void ThickLineMatchesCapsuleExactly()
+        {
+            for (int seed = 1; seed <= 128; seed++)
+            {
+                var rng = new Random((uint)(seed * 1103515245u | 1u));
+                int2 a = rng.NextInt2(new int2(-8, -8), new int2(9, 9));
+                int2 b = rng.NextInt2(new int2(-8, -8), new int2(9, 9));
+                int radius = rng.NextInt(0, 8);
+
+                var spec = GridSpec.FromPowerOfTwo(3, uint.MaxValue);
+                var thickLine = new[] { new Stamp(InfluenceShape.ThickLine(a, b, radius, 2), int2.zero) };
+                var capsule = new[] { new Stamp(InfluenceShape.Capsule(a, b, radius, 2), int2.zero) };
+
+                var (min, size) = InfluenceTestHarness.PaddedBox(capsule, spec, 2);
+
+                CollectionAssert.AreEqual(
+                    InfluenceTestHarness.Run(spec, capsule, min, size),
+                    InfluenceTestHarness.Run(spec, thickLine, min, size),
+                    $"ThickLine/Capsule mismatch seed {seed}");
+            }
+        }
+
         static void AssertMatch(int[,] field, long[,] oracle, int2 min, int2 size, int seed, int power)
         {
             for (int x = 0; x < size.x; x++)

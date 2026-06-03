@@ -9,7 +9,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         RectShell,
         Disc,
         Annulus,
-        Capsule
+        Capsule,
+
+        Ellipse,
+        RoundedRect,
+        ThickLine
     }
 
     public readonly struct InfluenceShape
@@ -49,6 +53,17 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public int2 CapsuleEnd => _b;
         public int CapsuleRadius => _p;
 
+        public int2 EllipseCenter => _a;
+        public int2 EllipseRadii => _b;
+
+        public int2 RoundedRectMin => _a;
+        public int2 RoundedRectSize => _b;
+        public int RoundedRectRadius => _p;
+
+        public int2 ThickLineStart => _a;
+        public int2 ThickLineEnd => _b;
+        public int ThickLineRadius => _p;
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public InfluenceShape WithWeight(int weight) => new(Kind, weight, _a, _b, _p, _q);
 
@@ -71,6 +86,18 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static InfluenceShape Capsule(int2 start, int2 end, int radius, int weight)
             => new(ShapeKind.Capsule, weight, start, end, radius, 0);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static InfluenceShape Ellipse(int2 center, int2 radii, int weight)
+            => new(ShapeKind.Ellipse, weight, center, radii, 0, 0);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static InfluenceShape RoundedRect(int2 min, int2 size, int radius, int weight)
+            => new(ShapeKind.RoundedRect, weight, min, size, radius, 0);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static InfluenceShape ThickLine(int2 start, int2 end, int radius, int weight)
+            => new(ShapeKind.ThickLine, weight, start, end, radius, 0);
     }
 
     public readonly struct Stamp

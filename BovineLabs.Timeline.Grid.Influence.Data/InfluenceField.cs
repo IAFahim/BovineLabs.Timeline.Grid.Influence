@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -8,85 +7,66 @@ using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data
 {
-    public unsafe struct InfluenceField : INativeDisposable
+    public unsafe partial struct InfluenceField : INativeDisposable
     {
         NativeParallelHashMap<int2, int> _slotByCoord;
         NativeList<int2> _coordBySlot;
-        NativeList<uint> _lastWrittenFrameBySlot;
+        NativeList<uint> _lastWrittenBySlot;
         NativeList<int> _freeSlots;
         NativeList<int> _activeSlots;
         NativeList<int> _data;
 
-        int _chunkSize;
-        int _log2;
-        int _stride;
-        int _dimension;
-        int _elementsPerChunk;
+        GridSpec _spec;
         uint _frameId;
-        uint _retentionFrames;
         Allocator _allocator;
-        JobHandle _lastScheduled;
+        JobHandle _dependency;
 
-        public bool IsCreated
-        {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => _data.IsCreated;
-        }
-
-        public JobHandle LastScheduled
-        {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => _lastScheduled;
-        }
-
-        public int ChunkSize => _chunkSize;
-        public int Log2 => _log2;
-        public int Stride => _stride;
-        public int Dimension => _dimension;
+        public bool IsCreated => _data.IsCreated;
+        public GridSpec Spec => _spec;
         public uint FrameId => _frameId;
+        public JobHandle Dependency => _dependency;
 
-        public NativeArray<int> ActiveSlots => _activeSlots.AsDeferredJobArray();
-        public NativeArray<int2> CoordBySlot => _coordBySlot.AsDeferredJobArray();
-        public NativeArray<int> Data => _data.AsDeferredJobArray();
-
-        public static InfluenceField Create(int chunkSize, uint retentionFrames, Allocator allocator)
+        public static InfluenceField Create(in GridSpec spec, Allocator allocator)
         {
-            if (chunkSize <= 0 || (chunkSize & (chunkSize - 1)) != 0)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(chunkSize), chunkSize, "Chunk size must be a positive power of two.");
-            }
-
-            int dimension = chunkSize + 1;
-            int stride = (dimension + 7) & ~7;
-
             return new InfluenceField
             {
                 _slotByCoord = new NativeParallelHashMap<int2, int>(64, allocator),
                 _coordBySlot = new NativeList<int2>(64, allocator),
-                _lastWrittenFrameBySlot = new NativeList<uint>(64, allocator),
+                _lastWrittenBySlot = new NativeList<uint>(64, allocator),
                 _freeSlots = new NativeList<int>(64, allocator),
                 _activeSlots = new NativeList<int>(64, allocator),
-                _data = new NativeList<int>(64 * stride * dimension, allocator),
-                _chunkSize = chunkSize,
-                _log2 = math.tzcnt(chunkSize),
-                _stride = stride,
-                _dimension = dimension,
-                _elementsPerChunk = stride * dimension,
+                _data = new NativeList<int>(64 * spec.ElementsPerChunk, allocator),
+                _spec = spec,
                 _frameId = 1,
-                _retentionFrames = retentionFrames,
                 _allocator = allocator,
-                _lastScheduled = default
+                _dependency = default
             };
         }
 
         public void Complete()
         {
-            _lastScheduled.Complete();
-            _lastScheduled = default;
+            _dependency.Complete();
+            _dependency = default;
         }
 
-        public JobHandle ScheduleBatched(NativeArray<Stamp> stamps, JobHandle dependsOn = default)
+        public FieldReader AsReader()
+        {
+            ThrowIfNotCreated();
+            return new FieldReader(
+                _slotByCoord,
+                _lastWrittenBySlot.AsArray(),
+                (int*)_data.GetUnsafePtr(),
+                _spec,
+                _frameId);
+        }
+
+        public int CompleteAndRead(int2 cell)
+        {
+            Complete();
+            return AsReader().ReadCell(cell);
+        }
+
+        public JobHandle Schedule(NativeArray<Stamp> stamps, JobHandle dependsOn)
         {
             ThrowIfNotCreated();
             Complete();
@@ -94,142 +74,122 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
             AdvanceFrame();
             EvictStale();
-
             _activeSlots.Clear();
-            int rectCapacity = PrepareSlotsAndCountRects(stamps);
 
-            if (_activeSlots.Length == 0)
+            int stampCount = stamps.IsCreated ? stamps.Length : 0;
+            if (stampCount == 0)
             {
-                _lastScheduled = default;
+                _dependency = default;
                 return default;
             }
 
-            NativeList<WorldRect> rects = new NativeList<WorldRect>(math.max(1, rectCapacity), _allocator);
+            NativeArray<int> offsets = new NativeArray<int>(stampCount + 1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            int totalSpans = PrepareSlotsAndOffsets(stamps, offsets);
+
+            if (_activeSlots.Length == 0 || totalSpans == 0)
+            {
+                offsets.Dispose();
+                _dependency = default;
+                return default;
+            }
+
+            NativeArray<WeightedRect> spans = new NativeArray<WeightedRect>(totalSpans, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
 
             JobHandle rasterize = new RasterizeJob
             {
                 Stamps = stamps,
-                Rects = rects
-            }.Schedule();
+                Offsets = offsets,
+                Spans = spans
+            }.Schedule(stampCount, 8);
 
             JobHandle clear = new ClearJob
             {
                 ActiveSlots = _activeSlots.AsArray(),
                 Data = _data.AsArray(),
-                ElementsPerChunk = _elementsPerChunk
+                ElementsPerChunk = _spec.ElementsPerChunk
             }.Schedule(_activeSlots.Length, 1);
 
             JobHandle scatter = new ScatterJob
             {
-                Rects = rects.AsDeferredJobArray(),
+                Spans = spans,
                 SlotByCoord = _slotByCoord,
                 Data = _data.AsArray(),
-                Log2 = _log2,
-                ChunkSize = _chunkSize,
-                Stride = _stride,
-                ElementsPerChunk = _elementsPerChunk
+                Spec = _spec
             }.Schedule(JobHandle.CombineDependencies(rasterize, clear));
 
             JobHandle resolve = new ResolveJob
             {
                 ActiveSlots = _activeSlots.AsArray(),
                 Data = _data.AsArray(),
-                Stride = _stride,
-                Dimension = _dimension,
-                ElementsPerChunk = _elementsPerChunk
+                Spec = _spec
             }.Schedule(_activeSlots.Length, 1, scatter);
 
-            _lastScheduled = rects.Dispose(resolve);
-            return _lastScheduled;
-        }
-
-        public int Read(int2 cell)
-        {
-            ThrowIfNotCreated();
-            Complete();
-
-            int2 coord = new int2(cell.x >> _log2, cell.y >> _log2);
-            if (!_slotByCoord.TryGetValue(coord, out int slot)) return 0;
-            if (_lastWrittenFrameBySlot[slot] != _frameId) return 0;
-
-            int lx = cell.x - (coord.x << _log2);
-            int ly = cell.y - (coord.y << _log2);
-            if ((uint)lx >= (uint)_chunkSize || (uint)ly >= (uint)_chunkSize) return 0;
-
-            return _data[slot * _elementsPerChunk + ly * _stride + lx];
-        }
-
-        public ChunkView GetChunkView(int2 coord)
-        {
-            ThrowIfNotCreated();
-            Complete();
-
-            if (!_slotByCoord.TryGetValue(coord, out int slot)) return default;
-            if (_lastWrittenFrameBySlot[slot] != _frameId) return default;
-
-            int* field = (int*)_data.GetUnsafePtr() + slot * _elementsPerChunk;
-            return new ChunkView
-            {
-                Field = field,
-                Base = new int2(coord.x << _log2, coord.y << _log2),
-                Stride = _stride,
-                ChunkSize = _chunkSize
-            };
+            JobHandle cleanup = JobHandle.CombineDependencies(spans.Dispose(resolve), offsets.Dispose(rasterize));
+            _dependency = cleanup;
+            return cleanup;
         }
 
         public void Dispose()
         {
-            if (!IsCreated) return;
+            if (!IsCreated)
+            {
+                return;
+            }
+
             Complete();
-
-            if (_slotByCoord.IsCreated) _slotByCoord.Dispose();
-            if (_coordBySlot.IsCreated) _coordBySlot.Dispose();
-            if (_lastWrittenFrameBySlot.IsCreated) _lastWrittenFrameBySlot.Dispose();
-            if (_freeSlots.IsCreated) _freeSlots.Dispose();
-            if (_activeSlots.IsCreated) _activeSlots.Dispose();
-            if (_data.IsCreated) _data.Dispose();
-
+            _slotByCoord.Dispose();
+            _coordBySlot.Dispose();
+            _lastWrittenBySlot.Dispose();
+            _freeSlots.Dispose();
+            _activeSlots.Dispose();
+            _data.Dispose();
             this = default;
         }
 
         public JobHandle Dispose(JobHandle inputDeps)
         {
-            if (!IsCreated) return inputDeps;
+            if (!IsCreated)
+            {
+                return inputDeps;
+            }
 
-            JobHandle handle = JobHandle.CombineDependencies(inputDeps, _lastScheduled);
+            JobHandle handle = JobHandle.CombineDependencies(inputDeps, _dependency);
             handle = _slotByCoord.Dispose(handle);
             handle = _coordBySlot.Dispose(handle);
-            handle = _lastWrittenFrameBySlot.Dispose(handle);
+            handle = _lastWrittenBySlot.Dispose(handle);
             handle = _freeSlots.Dispose(handle);
             handle = _activeSlots.Dispose(handle);
             handle = _data.Dispose(handle);
-
             this = default;
             return handle;
         }
 
-        int PrepareSlotsAndCountRects(NativeArray<Stamp> stamps)
+        int PrepareSlotsAndOffsets(NativeArray<Stamp> stamps, NativeArray<int> offsets)
         {
-            long rectCapacity = 0;
-
+            long running = 0;
             for (int i = 0; i < stamps.Length; i++)
             {
-                Stamp stamp = stamps[i];
-                rectCapacity += Rasterizer.EstimateRectCount(stamp);
-                ActivateBounds(Rasterizer.Bounds(stamp.Shape, stamp.Origin));
+                offsets[i] = IntegerMath.ClampToInt(running);
+                InfluenceShape shape = stamps[i].Shape;
+                running += Rasterizer.EstimateSpanCount(shape);
+                ActivateBounds(Rasterizer.Bounds(shape, stamps[i].Origin));
             }
 
-            return rectCapacity > int.MaxValue ? int.MaxValue : (int)rectCapacity;
+            offsets[stamps.Length] = IntegerMath.ClampToInt(running);
+            return offsets[stamps.Length];
         }
 
-        void ActivateBounds(AlignedRect bounds)
+        void ActivateBounds(in CellRect bounds)
         {
-            if (bounds.IsEmpty) return;
+            if (bounds.IsEmpty)
+            {
+                return;
+            }
 
-            int cx0 = bounds.Min.x >> _log2;
-            int cy0 = bounds.Min.y >> _log2;
-            int cx1 = (bounds.Max.x - 1) >> _log2;
-            int cy1 = (bounds.Max.y - 1) >> _log2;
+            int cx0 = bounds.Min.x >> _spec.Log2;
+            int cy0 = bounds.Min.y >> _spec.Log2;
+            int cx1 = (bounds.Max.x - 1) >> _spec.Log2;
+            int cy1 = (bounds.Max.y - 1) >> _spec.Log2;
 
             for (int cy = cy0; cy <= cy1; cy++)
             {
@@ -243,15 +203,21 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         void Activate(int2 coord)
         {
             int slot = EnsureSlot(coord);
-            if (_lastWrittenFrameBySlot[slot] == _frameId) return;
+            if (_lastWrittenBySlot[slot] == _frameId)
+            {
+                return;
+            }
 
-            _lastWrittenFrameBySlot[slot] = _frameId;
+            _lastWrittenBySlot[slot] = _frameId;
             _activeSlots.Add(slot);
         }
 
         int EnsureSlot(int2 coord)
         {
-            if (_slotByCoord.TryGetValue(coord, out int existing)) return existing;
+            if (_slotByCoord.TryGetValue(coord, out int existing))
+            {
+                return existing;
+            }
 
             int slot;
             if (_freeSlots.Length > 0)
@@ -259,14 +225,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 slot = _freeSlots[_freeSlots.Length - 1];
                 _freeSlots.RemoveAtSwapBack(_freeSlots.Length - 1);
                 _coordBySlot[slot] = coord;
-                _lastWrittenFrameBySlot[slot] = 0;
+                _lastWrittenBySlot[slot] = 0;
             }
             else
             {
                 slot = _coordBySlot.Length;
                 _coordBySlot.Add(coord);
-                _lastWrittenFrameBySlot.Add(0);
-                _data.ResizeUninitialized(_data.Length + _elementsPerChunk);
+                _lastWrittenBySlot.Add(0);
+                _data.ResizeUninitialized(_data.Length + _spec.ElementsPerChunk);
             }
 
             _slotByCoord.Add(coord, slot);
@@ -277,9 +243,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             if (_frameId == uint.MaxValue)
             {
-                for (int i = 0; i < _lastWrittenFrameBySlot.Length; i++)
+                for (int i = 0; i < _lastWrittenBySlot.Length; i++)
                 {
-                    _lastWrittenFrameBySlot[i] = 0;
+                    _lastWrittenBySlot[i] = 0;
                 }
 
                 _frameId = 1;
@@ -291,16 +257,21 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         void EvictStale()
         {
-            if (_retentionFrames == uint.MaxValue) return;
-
-            for (int slot = 0; slot < _lastWrittenFrameBySlot.Length; slot++)
+            if (_spec.RetentionFrames == uint.MaxValue)
             {
-                uint last = _lastWrittenFrameBySlot[slot];
-                if (last == 0) continue;
-                if (_frameId - last <= _retentionFrames) continue;
+                return;
+            }
+
+            for (int slot = 0; slot < _lastWrittenBySlot.Length; slot++)
+            {
+                uint last = _lastWrittenBySlot[slot];
+                if (last == 0 || _frameId - last <= _spec.RetentionFrames)
+                {
+                    continue;
+                }
 
                 _slotByCoord.Remove(_coordBySlot[slot]);
-                _lastWrittenFrameBySlot[slot] = 0;
+                _lastWrittenBySlot[slot] = 0;
                 _freeSlots.Add(slot);
             }
         }
@@ -313,18 +284,20 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             }
         }
 
-        [BurstCompile(FloatMode = FloatMode.Fast, OptimizeFor = OptimizeFor.Performance)]
-        struct RasterizeJob : IJob
+        [BurstCompile]
+        struct RasterizeJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<Stamp> Stamps;
-            public NativeList<WorldRect> Rects;
+            [ReadOnly] public NativeArray<int> Offsets;
+            [NativeDisableParallelForRestriction] public NativeArray<WeightedRect> Spans;
 
-            public void Execute()
+            public void Execute(int index)
             {
-                for (int i = 0; i < Stamps.Length; i++)
-                {
-                    Rasterizer.Emit(Stamps[i], ref Rects);
-                }
+                int start = Offsets[index];
+                int capacity = Offsets[index + 1] - start;
+                SpanSink sink = new SpanSink((WeightedRect*)Spans.GetUnsafePtr() + start, capacity);
+                Rasterizer.Emit(Stamps[index], ref sink);
+                sink.SealRemaining();
             }
         }
 
@@ -337,78 +310,85 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
             public void Execute(int index)
             {
-                int slot = ActiveSlots[index];
-                int* field = (int*)Data.GetUnsafePtr() + slot * ElementsPerChunk;
+                int* field = (int*)Data.GetUnsafePtr() + ActiveSlots[index] * ElementsPerChunk;
                 UnsafeUtility.MemClear(field, (long)ElementsPerChunk * sizeof(int));
             }
         }
 
-        [BurstCompile(FloatMode = FloatMode.Fast, OptimizeFor = OptimizeFor.Performance)]
+        [BurstCompile]
         struct ScatterJob : IJob
         {
-            [ReadOnly] public NativeArray<WorldRect> Rects;
+            [ReadOnly] public NativeArray<WeightedRect> Spans;
             [ReadOnly] public NativeParallelHashMap<int2, int> SlotByCoord;
             public NativeArray<int> Data;
-            public int Log2;
-            public int ChunkSize;
-            public int Stride;
-            public int ElementsPerChunk;
+            public GridSpec Spec;
 
             public void Execute()
             {
                 int* data = (int*)Data.GetUnsafePtr();
+                int log2 = Spec.Log2;
+                int chunkSize = Spec.ChunkSize;
+                int stride = Spec.Stride;
+                int elements = Spec.ElementsPerChunk;
 
-                for (int i = 0; i < Rects.Length; i++)
+                for (int i = 0; i < Spans.Length; i++)
                 {
-                    AlignedRect bounds = Rects[i].Bounds;
-                    if (bounds.IsEmpty) continue;
+                    WeightedRect span = Spans[i];
+                    if (span.IsEmpty)
+                    {
+                        continue;
+                    }
 
-                    int weight = Rects[i].Weight;
-                    int cx0 = bounds.Min.x >> Log2;
-                    int cy0 = bounds.Min.y >> Log2;
-                    int cx1 = (bounds.Max.x - 1) >> Log2;
-                    int cy1 = (bounds.Max.y - 1) >> Log2;
+                    CellRect bounds = span.Bounds;
+                    int weight = span.Weight;
+                    int cx0 = bounds.Min.x >> log2;
+                    int cy0 = bounds.Min.y >> log2;
+                    int cx1 = (bounds.Max.x - 1) >> log2;
+                    int cy1 = (bounds.Max.y - 1) >> log2;
 
                     for (int cy = cy0; cy <= cy1; cy++)
                     {
                         for (int cx = cx0; cx <= cx1; cx++)
                         {
-                            if (!SlotByCoord.TryGetValue(new int2(cx, cy), out int slot)) continue;
+                            if (!SlotByCoord.TryGetValue(new int2(cx, cy), out int slot))
+                            {
+                                continue;
+                            }
 
-                            int baseX = cx << Log2;
-                            int baseY = cy << Log2;
+                            int baseX = cx << log2;
+                            int baseY = cy << log2;
                             int lx0 = math.max(bounds.Min.x, baseX) - baseX;
                             int ly0 = math.max(bounds.Min.y, baseY) - baseY;
-                            int lx1 = math.min(bounds.Max.x, baseX + ChunkSize) - baseX;
-                            int ly1 = math.min(bounds.Max.y, baseY + ChunkSize) - baseY;
+                            int lx1 = math.min(bounds.Max.x, baseX + chunkSize) - baseX;
+                            int ly1 = math.min(bounds.Max.y, baseY + chunkSize) - baseY;
 
-                            if (lx0 >= lx1 || ly0 >= ly1) continue;
+                            if (lx0 >= lx1 || ly0 >= ly1)
+                            {
+                                continue;
+                            }
 
-                            int* field = data + slot * ElementsPerChunk;
-                            field[ly0 * Stride + lx0] += weight;
-                            field[ly0 * Stride + lx1] -= weight;
-                            field[ly1 * Stride + lx0] -= weight;
-                            field[ly1 * Stride + lx1] += weight;
+                            int* field = data + slot * elements;
+                            field[ly0 * stride + lx0] += weight;
+                            field[ly0 * stride + lx1] -= weight;
+                            field[ly1 * stride + lx0] -= weight;
+                            field[ly1 * stride + lx1] += weight;
                         }
                     }
                 }
             }
         }
 
-        [BurstCompile(FloatMode = FloatMode.Fast, OptimizeFor = OptimizeFor.Performance)]
+        [BurstCompile]
         struct ResolveJob : IJobParallelFor
         {
             [ReadOnly] public NativeArray<int> ActiveSlots;
             [NativeDisableParallelForRestriction] public NativeArray<int> Data;
-            public int Stride;
-            public int Dimension;
-            public int ElementsPerChunk;
+            public GridSpec Spec;
 
             public void Execute(int index)
             {
-                int slot = ActiveSlots[index];
-                int* field = (int*)Data.GetUnsafePtr() + slot * ElementsPerChunk;
-                PrefixSumResolve.Run(field, Stride, Dimension);
+                int* field = (int*)Data.GetUnsafePtr() + ActiveSlots[index] * Spec.ElementsPerChunk;
+                PrefixSum.Run(field, Spec);
             }
         }
     }

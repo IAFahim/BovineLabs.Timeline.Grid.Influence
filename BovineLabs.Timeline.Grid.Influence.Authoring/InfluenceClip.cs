@@ -33,6 +33,20 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public Vector2Int CapsuleEnd = new(3, 5);
         public int CapsuleRadius = 5;
 
+        [Header("Ellipse")]
+        public Vector2Int EllipseCenter = Vector2Int.zero;
+        public Vector2Int EllipseRadii = new(5, 3);
+
+        [Header("Rounded Rect")]
+        public Vector2Int RoundedRectMin = new(-5, -3);
+        public Vector2Int RoundedRectSize = new(10, 6);
+        public int RoundedRectRadius = 2;
+
+        [Header("Thick Line")]
+        public Vector2Int ThickLineStart = new(-5, 0);
+        public Vector2Int ThickLineEnd = new(5, 0);
+        public int ThickLineRadius = 1;
+
         [Header("Transform")]
         public Vector3 LocalOffset;
 
@@ -59,6 +73,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             int2 annulusCenter = new(AnnulusCenter.x, AnnulusCenter.y);
             int2 capsuleStart = new(CapsuleStart.x, CapsuleStart.y);
             int2 capsuleEnd = new(CapsuleEnd.x, CapsuleEnd.y);
+            int2 ellipseCenter = new(EllipseCenter.x, EllipseCenter.y);
+            int2 ellipseRadii = new(EllipseRadii.x, EllipseRadii.y);
+            int2 roundedRectMin = new(RoundedRectMin.x, RoundedRectMin.y);
+            int2 roundedRectSize = new(RoundedRectSize.x, RoundedRectSize.y);
+            int2 thickLineStart = new(ThickLineStart.x, ThickLineStart.y);
+            int2 thickLineEnd = new(ThickLineEnd.x, ThickLineEnd.y);
 
             return Kind switch
             {
@@ -67,6 +87,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 ShapeKind.Disc => InfluenceShape.Disc(discCenter, DiscRadius, Weight),
                 ShapeKind.Annulus => InfluenceShape.Annulus(annulusCenter, AnnulusOuterRadius, AnnulusInnerRadius, Weight),
                 ShapeKind.Capsule => InfluenceShape.Capsule(capsuleStart, capsuleEnd, CapsuleRadius, Weight),
+                ShapeKind.Ellipse => InfluenceShape.Ellipse(ellipseCenter, ellipseRadii, Weight),
+                ShapeKind.RoundedRect => InfluenceShape.RoundedRect(roundedRectMin, roundedRectSize, RoundedRectRadius, Weight),
+                ShapeKind.ThickLine => InfluenceShape.ThickLine(thickLineStart, thickLineEnd, ThickLineRadius, Weight),
                 _ => InfluenceShape.Disc(discCenter, DiscRadius, Weight)
             };
         }
@@ -79,6 +102,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             AnnulusOuterRadius = math.max(0, AnnulusOuterRadius);
             AnnulusInnerRadius = math.clamp(AnnulusInnerRadius, -1, AnnulusOuterRadius - 1);
             CapsuleRadius = math.max(0, CapsuleRadius);
+            EllipseRadii = new Vector2Int(math.max(0, EllipseRadii.x), math.max(0, EllipseRadii.y));
+            RoundedRectSize = new Vector2Int(math.max(0, RoundedRectSize.x), math.max(0, RoundedRectSize.y));
+            RoundedRectRadius = math.max(0, RoundedRectRadius);
+            ThickLineRadius = math.max(0, ThickLineRadius);
         }
     }
 }

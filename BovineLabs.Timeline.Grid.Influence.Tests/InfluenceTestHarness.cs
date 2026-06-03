@@ -134,6 +134,22 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                         ? shape.Weight
                         : 0;
 
+                case ShapeKind.Ellipse:
+                    return InEllipse(origin + shape.EllipseCenter, shape.EllipseRadii, cell)
+                        ? shape.Weight
+                        : 0;
+
+                case ShapeKind.RoundedRect:
+                    return InRoundedRect(origin + shape.RoundedRectMin, shape.RoundedRectSize, shape.RoundedRectRadius, cell)
+                        ? shape.Weight
+                        : 0;
+
+                case ShapeKind.ThickLine:
+                    return shape.ThickLineRadius >= 0 &&
+                           CapsuleContains(origin + shape.ThickLineStart, origin + shape.ThickLineEnd, shape.ThickLineRadius, cell)
+                        ? shape.Weight
+                        : 0;
+
                 default:
                     return 0;
             }
@@ -149,6 +165,66 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             long dx = cell.x - center.x;
             long dy = cell.y - center.y;
             return dx * dx + dy * dy <= (long)radius * radius;
+        }
+
+        internal static bool InEllipse(int2 center, int2 radii, int2 cell)
+        {
+            if (radii.x < 0 || radii.y < 0)
+            {
+                return false;
+            }
+
+            int dx = cell.x - center.x;
+            int dy = cell.y - center.y;
+
+            if (radii.x == 0 && radii.y == 0)
+            {
+                return dx == 0 && dy == 0;
+            }
+
+            if (radii.x == 0)
+            {
+                return dx == 0 && math.abs(dy) <= radii.y;
+            }
+
+            if (radii.y == 0)
+            {
+                return dy == 0 && math.abs(dx) <= radii.x;
+            }
+
+            BigInteger rx2 = (BigInteger)radii.x * radii.x;
+            BigInteger ry2 = (BigInteger)radii.y * radii.y;
+            BigInteger dx2 = (BigInteger)dx * dx;
+            BigInteger dy2 = (BigInteger)dy * dy;
+
+            return dx2 * ry2 + dy2 * rx2 <= rx2 * ry2;
+        }
+
+        internal static bool InRoundedRect(int2 min, int2 size, int radius, int2 cell)
+        {
+            if (size.x <= 0 || size.y <= 0 || radius < 0 || !InRect(min, size, cell))
+            {
+                return false;
+            }
+
+            int maxRadius = (math.min(size.x, size.y) - 1) >> 1;
+            int r = math.min(radius, maxRadius);
+
+            if (r <= 0)
+            {
+                return true;
+            }
+
+            int maxX = min.x + size.x - 1;
+            int maxY = min.y + size.y - 1;
+
+            int cx = math.clamp(cell.x, min.x + r, maxX - r);
+            int cy = math.clamp(cell.y, min.y + r, maxY - r);
+
+            long dx = cell.x - cx;
+            long dy = cell.y - cy;
+
+            return dx * dx + dy * dy <= (long)r * r;
         }
 
         internal static bool CapsuleContains(int2 a, int2 b, int radius, int2 p)
@@ -209,7 +285,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                 weight = 1;
             }
 
-            switch (rng.NextInt(0, 5))
+            switch (rng.NextInt(0, 8))
             {
                 case 0:
                     return new Stamp(InfluenceShape.SolidRect(
@@ -237,11 +313,30 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                         rng.NextInt2(new int2(-8, -8), new int2(9, 9)), outer, inner, weight), origin);
                 }
 
-                default:
+                case 4:
                     return new Stamp(InfluenceShape.Capsule(
                         rng.NextInt2(new int2(-8, -8), new int2(9, 9)),
                         rng.NextInt2(new int2(-8, -8), new int2(9, 9)),
                         rng.NextInt(0, 10), weight), origin);
+
+                case 5:
+                    return new Stamp(InfluenceShape.Ellipse(
+                        rng.NextInt2(new int2(-8, -8), new int2(9, 9)),
+                        rng.NextInt2(new int2(0, 0), new int2(12, 8)),
+                        weight), origin);
+
+                case 6:
+                    return new Stamp(InfluenceShape.RoundedRect(
+                        rng.NextInt2(new int2(-10, -10), new int2(11, 11)),
+                        rng.NextInt2(new int2(1, 1), new int2(18, 18)),
+                        rng.NextInt(0, 6),
+                        weight), origin);
+
+                default:
+                    return new Stamp(InfluenceShape.ThickLine(
+                        rng.NextInt2(new int2(-8, -8), new int2(9, 9)),
+                        rng.NextInt2(new int2(-8, -8), new int2(9, 9)),
+                        rng.NextInt(0, 8), weight), origin);
             }
         }
 

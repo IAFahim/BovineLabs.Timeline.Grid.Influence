@@ -62,7 +62,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                 new(InfluenceShape.Disc(int2.zero, -1, 1), int2.zero),
                 new(InfluenceShape.Annulus(int2.zero, 5, 5, 1), int2.zero),
                 new(InfluenceShape.Annulus(int2.zero, -1, -2, 1), int2.zero),
-                new(InfluenceShape.Capsule(int2.zero, new int2(3, 3), -1, 1), int2.zero)
+                new(InfluenceShape.Capsule(int2.zero, new int2(3, 3), -1, 1), int2.zero),
+                new(InfluenceShape.Ellipse(int2.zero, new int2(-1, 3), 1), int2.zero),
+                new(InfluenceShape.Ellipse(int2.zero, new int2(3, -1), 1), int2.zero),
+                new(InfluenceShape.RoundedRect(int2.zero, new int2(0, 5), 1, 1), int2.zero),
+                new(InfluenceShape.RoundedRect(int2.zero, new int2(5, 0), 1, 1), int2.zero),
+                new(InfluenceShape.RoundedRect(int2.zero, new int2(5, 5), -1, 1), int2.zero),
+                new(InfluenceShape.ThickLine(int2.zero, new int2(5, 0), -1, 1), int2.zero),
             };
 
             foreach (Stamp stamp in degenerate)

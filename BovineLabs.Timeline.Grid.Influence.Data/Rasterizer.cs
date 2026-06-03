@@ -104,6 +104,42 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     return new CellRect(math.min(a, b) - new int2(r, r), math.max(a, b) + new int2(r + 1, r + 1));
                 }
 
+                case ShapeKind.Ellipse:
+                {
+                    if (shape.EllipseRadii.x < 0 || shape.EllipseRadii.y < 0)
+                    {
+                        return CellRect.Empty;
+                    }
+
+                    int2 center = origin + shape.EllipseCenter;
+                    int2 radii = shape.EllipseRadii;
+                    return new CellRect(center - radii, center + radii + new int2(1, 1));
+                }
+
+                case ShapeKind.RoundedRect:
+                {
+                    if (shape.RoundedRectSize.x <= 0 || shape.RoundedRectSize.y <= 0 || shape.RoundedRectRadius < 0)
+                    {
+                        return CellRect.Empty;
+                    }
+
+                    int2 min = origin + shape.RoundedRectMin;
+                    return new CellRect(min, min + shape.RoundedRectSize);
+                }
+
+                case ShapeKind.ThickLine:
+                {
+                    if (shape.ThickLineRadius < 0)
+                    {
+                        return CellRect.Empty;
+                    }
+
+                    int r = shape.ThickLineRadius;
+                    int2 a = origin + shape.ThickLineStart;
+                    int2 b = origin + shape.ThickLineEnd;
+                    return new CellRect(math.min(a, b) - new int2(r, r), math.max(a, b) + new int2(r + 1, r + 1));
+                }
+
                 default:
                     return CellRect.Empty;
             }
@@ -153,6 +189,37 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     return IntegerMath.ClampToInt(spanY + 2L * shape.CapsuleRadius + 3L);
                 }
 
+                case ShapeKind.Ellipse:
+                {
+                    if (shape.EllipseRadii.x < 0 || shape.EllipseRadii.y < 0)
+                    {
+                        return 0;
+                    }
+
+                    return IntegerMath.ClampToInt(2L * shape.EllipseRadii.y + 1L);
+                }
+
+                case ShapeKind.RoundedRect:
+                {
+                    if (shape.RoundedRectSize.x <= 0 || shape.RoundedRectSize.y <= 0 || shape.RoundedRectRadius < 0)
+                    {
+                        return 0;
+                    }
+
+                    return shape.RoundedRectSize.y;
+                }
+
+                case ShapeKind.ThickLine:
+                {
+                    if (shape.ThickLineRadius < 0)
+                    {
+                        return 0;
+                    }
+
+                    long spanY = math.abs((long)shape.ThickLineEnd.y - shape.ThickLineStart.y);
+                    return IntegerMath.ClampToInt(spanY + 2L * shape.ThickLineRadius + 3L);
+                }
+
                 default:
                     return 0;
             }
@@ -189,6 +256,18 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
                 case ShapeKind.Capsule:
                     EmitCapsule(ref sink, origin + shape.CapsuleStart, origin + shape.CapsuleEnd, shape.CapsuleRadius, weight);
+                    break;
+
+                case ShapeKind.Ellipse:
+                    EmitEllipse(ref sink, origin + shape.EllipseCenter, shape.EllipseRadii, weight);
+                    break;
+
+                case ShapeKind.RoundedRect:
+                    EmitRoundedRect(ref sink, origin + shape.RoundedRectMin, shape.RoundedRectSize, shape.RoundedRectRadius, weight);
+                    break;
+
+                case ShapeKind.ThickLine:
+                    EmitCapsule(ref sink, origin + shape.ThickLineStart, origin + shape.ThickLineEnd, shape.ThickLineRadius, weight);
                     break;
             }
         }
@@ -343,6 +422,115 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             }
 
             return lo;
+        }
+
+        static void EmitEllipse(ref SpanSink sink, int2 center, int2 radii, int weight)
+        {
+            if (radii.x < 0 || radii.y < 0)
+            {
+                return;
+            }
+
+            int rx = radii.x;
+            int ry = radii.y;
+
+            for (int dy = -ry; dy <= ry; dy++)
+            {
+                int half = EllipseHalfWidth(rx, ry, dy);
+                int y = center.y + dy;
+
+                sink.Push(new WeightedRect(
+                    new CellRect(
+                        new int2(center.x - half, y),
+                        new int2(center.x + half + 1, y + 1)),
+                    weight));
+            }
+        }
+
+        static int EllipseHalfWidth(int rx, int ry, int dy)
+        {
+            if (rx <= 0)
+            {
+                return 0;
+            }
+
+            if (ry <= 0)
+            {
+                return rx;
+            }
+
+            long rx2 = (long)rx * rx;
+            long ry2 = (long)ry * ry;
+            long dy2 = (long)dy * dy;
+            long rhs = rx2 * ry2;
+
+            int lo = 0;
+            int hi = rx;
+
+            while (lo < hi)
+            {
+                int mid = lo + ((hi - lo + 1) >> 1);
+                long lhs = (long)mid * mid * ry2 + dy2 * rx2;
+
+                if (lhs <= rhs)
+                {
+                    lo = mid;
+                }
+                else
+                {
+                    hi = mid - 1;
+                }
+            }
+
+            return lo;
+        }
+
+        static void EmitRoundedRect(ref SpanSink sink, int2 min, int2 size, int radius, int weight)
+        {
+            if (size.x <= 0 || size.y <= 0 || radius < 0)
+            {
+                return;
+            }
+
+            int maxRadius = (math.min(size.x, size.y) - 1) >> 1;
+            int r = math.min(radius, maxRadius);
+
+            if (r <= 0)
+            {
+                EmitRect(ref sink, min, size, weight);
+                return;
+            }
+
+            long r2 = (long)r * r;
+
+            int leftCenter = min.x + r;
+            int rightCenter = min.x + size.x - r - 1;
+            int bottomCenter = min.y + r;
+            int topCenter = min.y + size.y - r - 1;
+
+            for (int ly = 0; ly < size.y; ly++)
+            {
+                int y = min.y + ly;
+                bool bottomBand = ly < r;
+                bool topBand = ly >= size.y - r;
+
+                int x0 = min.x;
+                int x1 = min.x + size.x;
+
+                if (bottomBand || topBand)
+                {
+                    int centerY = bottomBand ? bottomCenter : topCenter;
+                    int dy = y - centerY;
+                    int half = IntegerMath.FloorSqrt(r2 - (long)dy * dy);
+
+                    x0 = leftCenter - half;
+                    x1 = rightCenter + half + 1;
+                }
+
+                sink.Push(new WeightedRect(
+                    new CellRect(new int2(x0, y), new int2(x1, y + 1)),
+                    weight));
+            }
         }
     }
 }

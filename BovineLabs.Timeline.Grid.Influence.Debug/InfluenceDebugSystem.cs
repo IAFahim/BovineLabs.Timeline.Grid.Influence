@@ -1,6 +1,6 @@
 #if UNITY_EDITOR || BL_DEBUG
-using BovineLabs.Core;
 using BovineLabs.Core.ConfigVars;
+using BovineLabs.Core;
 using BovineLabs.Quill;
 using BovineLabs.Timeline.Core.Debug;
 using BovineLabs.Timeline.Data;
@@ -21,25 +21,25 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         [ConfigVar("influencegizmo.draw-enabled", false, "Enable the grid influence gizmo.")]
         public static readonly SharedStatic<bool> Enabled = SharedStatic<bool>.GetOrCreate<Tags.Enabled>();
 
-        [ConfigVar("influencegizmo.draw-stamps", true, "Draw individual influence stamps (clips) as wireframes.")]
+        [ConfigVar("influencegizmo.draw-stamps", true, "Draw individual influence stamps as wireframes.")]
         public static readonly SharedStatic<bool> DrawStamps = SharedStatic<bool>.GetOrCreate<Tags.DrawStamps>();
 
-        [ConfigVar("influencegizmo.draw-grid", true, "Draw the active grid chunk boundaries.")]
+        [ConfigVar("influencegizmo.draw-grid", true, "Draw active chunk boundaries.")]
         public static readonly SharedStatic<bool> DrawGrid = SharedStatic<bool>.GetOrCreate<Tags.DrawGrid>();
 
-        [ConfigVar("influencegizmo.draw-values", true, "Draw the accumulated influence values in the grid.")]
+        [ConfigVar("influencegizmo.draw-values", true, "Draw accumulated influence values.")]
         public static readonly SharedStatic<bool> DrawValues = SharedStatic<bool>.GetOrCreate<Tags.DrawValues>();
 
-        [ConfigVar("influencegizmo.positive-color", 0.2f, 0.8f, 0.4f, 1.0f, "Color for positive influence (Green)")]
+        [ConfigVar("influencegizmo.positive-color", 0.2f, 0.8f, 0.4f, 1.0f, "Positive influence color.")]
         public static readonly SharedStatic<Color> PositiveColor = SharedStatic<Color>.GetOrCreate<Tags.PositiveColor>();
 
-        [ConfigVar("influencegizmo.negative-color", 0.9f, 0.2f, 0.2f, 1.0f, "Color for negative influence (Red)")]
+        [ConfigVar("influencegizmo.negative-color", 0.9f, 0.2f, 0.2f, 1.0f, "Negative influence color.")]
         public static readonly SharedStatic<Color> NegativeColor = SharedStatic<Color>.GetOrCreate<Tags.NegativeColor>();
 
-        [ConfigVar("influencegizmo.grid-color", 1.0f, 1.0f, 1.0f, 0.15f, "Color for the chunk boundary lines")]
+        [ConfigVar("influencegizmo.grid-color", 1.0f, 1.0f, 1.0f, 0.15f, "Chunk boundary color.")]
         public static readonly SharedStatic<Color> GridColor = SharedStatic<Color>.GetOrCreate<Tags.GridColor>();
 
-        private struct Tags
+        struct Tags
         {
             public struct Enabled { }
             public struct DrawStamps { }
@@ -56,16 +56,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
     [UpdateInGroup(typeof(DebugSystemGroup))]
     public partial struct InfluenceDebugSystem : ISystem
     {
-        private EntityQuery _query;
+        EntityQuery _stampQuery;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<DrawSystem.Singleton>();
             state.RequireForUpdate<InfluenceGridSettings>();
-            state.RequireForUpdate<InfluenceFieldDependency>();
 
-            _query = SystemAPI.QueryBuilder()
+            _stampQuery = SystemAPI.QueryBuilder()
                 .WithAll<TrackBinding, InfluenceClipData, ClipActive>()
                 .Build();
         }
@@ -74,61 +73,61 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         public void OnUpdate(ref SystemState state)
         {
             if (!TimelineDebugUtility.TryGetDrawer<InfluenceDebugSystem>(
-                  ref state, InfluenceDebugSystemConfig.Enabled.Data, out var drawer))
+                    ref state, InfluenceDebugSystemConfig.Enabled.Data, out var drawer))
+            {
                 return;
+            }
 
             var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
             var basis = new GridBasis(settings.PlaneNormal);
 
-            if (InfluenceDebugSystemConfig.DrawStamps.Data && !_query.IsEmpty)
+            if (InfluenceDebugSystemConfig.DrawStamps.Data && !_stampQuery.IsEmpty)
             {
                 state.Dependency = new DrawStampsJob
                 {
-                    Drawer        = drawer,
+                    Drawer = drawer,
                     PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
                     NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
-                    CellSize      = settings.CellSize,
-                    Basis         = basis,
-                    LtwLookup     = SystemAPI.GetComponentLookup<LocalToWorld>(true)
-                }.ScheduleParallel(_query, state.Dependency);
+                    CellSize = settings.CellSize,
+                    Basis = basis,
+                    LocalToWorldLookup = SystemAPI.GetComponentLookup<LocalToWorld>(true)
+                }.ScheduleParallel(_stampQuery, state.Dependency);
             }
 
             bool drawGrid = InfluenceDebugSystemConfig.DrawGrid.Data;
             bool drawValues = InfluenceDebugSystemConfig.DrawValues.Data;
 
-            if ((drawGrid || drawValues) && SystemAPI.TryGetSingleton<InfluenceFieldSingleton>(out var fieldComp))
+            if ((drawGrid || drawValues) &&
+                SystemAPI.TryGetSingletonRW<InfluenceFieldSingleton>(out var fieldRw) &&
+                fieldRw.ValueRO.Field.IsCreated)
             {
-                var field = fieldComp.Field;
-                if (field.IsCreated)
+                var field = fieldRw.ValueRO.Field;
+                var dependency = JobHandle.CombineDependencies(state.Dependency, field.Dependency);
+
+                dependency = new DrawGridJob
                 {
-                    var dependencyRw = SystemAPI.GetSingletonRW<InfluenceFieldDependency>();
-                    state.Dependency = JobHandle.CombineDependencies(state.Dependency, dependencyRw.ValueRO.Value);
+                    Drawer = drawer,
+                    PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
+                    NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
+                    GridColor = InfluenceDebugSystemConfig.GridColor.Data,
+                    CellSize = settings.CellSize,
+                    Basis = basis,
+                    DrawGrid = drawGrid,
+                    DrawValues = drawValues,
+                    ActiveSlots = field.ActiveSlotsDeferred,
+                    CoordBySlot = field.CoordBySlotDeferred,
+                    Data = field.DataDeferred,
+                    Spec = field.Spec
+                }.Schedule(dependency);
 
-                    state.Dependency = new DrawGridJob
-                    {
-                        Drawer        = drawer,
-                        PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
-                        NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
-                        GridColor     = InfluenceDebugSystemConfig.GridColor.Data,
-                        CellSize      = settings.CellSize,
-                        Basis         = basis,
-                        DrawGrid      = drawGrid,
-                        DrawValues    = drawValues,
-                        ActiveSlots   = field.ActiveSlots,
-                        CoordBySlot   = field.CoordBySlot,
-                        Data          = field.Data,
-                        ChunkSize     = field.ChunkSize,
-                        Stride        = field.Stride,
-                        Dimension     = field.Dimension
-                    }.Schedule(state.Dependency);
-
-                    dependencyRw.ValueRW.Value = state.Dependency;
-                }
+                field.PublishDependency(dependency);
+                fieldRw.ValueRW.Field = field;
+                state.Dependency = dependency;
             }
         }
 
         [BurstCompile]
-        private partial struct DrawStampsJob : IJobEntity
+        partial struct DrawStampsJob : IJobEntity
         {
             public Drawer Drawer;
             public Color PositiveColor;
@@ -136,77 +135,84 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             public float CellSize;
             public GridBasis Basis;
 
-            [ReadOnly] public ComponentLookup<LocalToWorld> LtwLookup;
+            [ReadOnly] public ComponentLookup<LocalToWorld> LocalToWorldLookup;
 
-            public void Execute(in TrackBinding binding, in InfluenceClipData active)
+            public void Execute(in TrackBinding binding, in InfluenceClipData clip)
             {
-                if (!LtwLookup.TryGetComponent(binding.Value, out var ltw))
+                if (!LocalToWorldLookup.TryGetComponent(binding.Value, out var localToWorld))
+                {
                     return;
+                }
 
-                var shape = active.Shape;
-
-                var color = shape.Weight >= 0 ? PositiveColor : NegativeColor;
+                InfluenceShape shape = clip.Shape;
+                Color color = shape.Weight >= 0 ? PositiveColor : NegativeColor;
                 color.a *= 0.8f;
 
-                var origin = ltw.Position + math.rotate(ltw.Rotation, active.LocalOffset);
+                float3 origin = localToWorld.Position + math.rotate(localToWorld.Rotation, clip.LocalOffset);
+                float heightOffset = math.dot(origin, Basis.Normal);
+                float2 projected = Basis.ToGridSpace(origin);
 
-                var heightOffset = math.dot(origin, Basis.Normal);
-                var projectedPos = Basis.ToGridSpace(origin);
+                int2 gridOrigin = new int2(
+                    (int)math.floor(projected.x / CellSize),
+                    (int)math.floor(projected.y / CellSize));
 
-                var gridOrigin = new int2(
-                    (int)math.floor(projectedPos.x / CellSize),
-                    (int)math.floor(projectedPos.y / CellSize)
-                );
-
-                var snappedGridPos = new float2(
+                float2 snappedGrid = new float2(
                     gridOrigin.x * CellSize + CellSize * 0.5f,
                     gridOrigin.y * CellSize + CellSize * 0.5f);
 
-                var snappedWorldOrigin = Basis.ToWorldSpace(snappedGridPos, heightOffset);
+                float3 snappedWorld = Basis.ToWorldSpace(snappedGrid, heightOffset);
 
                 switch (shape.Kind)
                 {
                     case ShapeKind.SolidRect:
-                        DrawRectWireframe(snappedWorldOrigin, shape.RectMin, shape.RectSize, color, heightOffset);
+                        DrawRect(snappedWorld, shape.RectMin, shape.RectSize, color, heightOffset);
                         break;
                     case ShapeKind.RectShell:
-                        DrawRectWireframe(snappedWorldOrigin, shape.ShellMin, shape.ShellSize, color, heightOffset);
-                        var innerMin = shape.ShellMin + new int2(shape.ShellThickness);
-                        var innerSize = shape.ShellSize - new int2(shape.ShellThickness * 2);
-                        DrawRectWireframe(snappedWorldOrigin, innerMin, innerSize, color, heightOffset);
+                        DrawRect(snappedWorld, shape.ShellMin, shape.ShellSize, color, heightOffset);
+                        DrawRect(snappedWorld,
+                            shape.ShellMin + new int2(shape.ShellThickness, shape.ShellThickness),
+                            shape.ShellSize - new int2(shape.ShellThickness * 2, shape.ShellThickness * 2),
+                            color, heightOffset);
                         break;
                     case ShapeKind.Disc:
-                        DrawDiscWireframe(snappedWorldOrigin, shape.DiscCenter, shape.DiscRadius, color, heightOffset);
+                        DrawDisc(snappedWorld, shape.DiscCenter, shape.DiscRadius, color, heightOffset);
                         break;
                     case ShapeKind.Annulus:
-                        DrawDiscWireframe(snappedWorldOrigin, shape.AnnulusCenter, shape.AnnulusOuter, color, heightOffset);
-                        if (shape.AnnulusInner >= 0)
-                            DrawDiscWireframe(snappedWorldOrigin, shape.AnnulusCenter, shape.AnnulusInner, color, heightOffset);
+                        DrawDisc(snappedWorld, shape.AnnulusCenter, shape.AnnulusOuterRadius, color, heightOffset);
+                        if (shape.AnnulusInnerRadius >= 0)
+                        {
+                            DrawDisc(snappedWorld, shape.AnnulusCenter, shape.AnnulusInnerRadius, color, heightOffset);
+                        }
+
                         break;
                     case ShapeKind.Capsule:
-                        DrawCapsuleWireframe(snappedWorldOrigin, shape.CapsuleA, shape.CapsuleB, shape.CapsuleRadius, color, heightOffset);
+                        DrawCapsule(snappedWorld, shape.CapsuleStart, shape.CapsuleEnd, shape.CapsuleRadius, color, heightOffset);
                         break;
                 }
 
-                Drawer.Point(snappedWorldOrigin, 0.1f * CellSize, color);
+                Drawer.Point(snappedWorld, 0.1f * CellSize, color);
 
                 FixedString32Bytes label = default;
-                label.Append("Wt: ");
+                label.Append((FixedString32Bytes)"Wt: ");
                 label.Append(shape.Weight);
-                Drawer.Text32(snappedWorldOrigin + Basis.Normal * 0.3f, label, color, 10f);
+                Drawer.Text32(snappedWorld + Basis.Normal * 0.3f, label, color, 10f);
             }
 
-            private void DrawRectWireframe(float3 localOrigin, int2 min, int2 size, Color color, float heightOffset)
+            void DrawRect(float3 localOrigin, int2 min, int2 size, Color color, float heightOffset)
             {
-                if (size.x <= 0 || size.y <= 0) return;
+                if (size.x <= 0 || size.y <= 0)
+                {
+                    return;
+                }
 
-                var startGridPos = Basis.ToGridSpace(localOrigin) + new float2(min.x * CellSize, min.y * CellSize);
-                startGridPos -= new float2(CellSize * 0.5f, CellSize * 0.5f);
+                float2 start = Basis.ToGridSpace(localOrigin)
+                    + new float2(min.x * CellSize, min.y * CellSize)
+                    - new float2(CellSize * 0.5f, CellSize * 0.5f);
 
-                var p0 = Basis.ToWorldSpace(startGridPos, heightOffset);
-                var p1 = Basis.ToWorldSpace(startGridPos + new float2(size.x * CellSize, 0), heightOffset);
-                var p2 = Basis.ToWorldSpace(startGridPos + new float2(size.x * CellSize, size.y * CellSize), heightOffset);
-                var p3 = Basis.ToWorldSpace(startGridPos + new float2(0, size.y * CellSize), heightOffset);
+                float3 p0 = Basis.ToWorldSpace(start, heightOffset);
+                float3 p1 = Basis.ToWorldSpace(start + new float2(size.x * CellSize, 0), heightOffset);
+                float3 p2 = Basis.ToWorldSpace(start + new float2(size.x * CellSize, size.y * CellSize), heightOffset);
+                float3 p3 = Basis.ToWorldSpace(start + new float2(0, size.y * CellSize), heightOffset);
 
                 Drawer.Line(p0, p1, color);
                 Drawer.Line(p1, p2, color);
@@ -214,32 +220,36 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 Drawer.Line(p3, p0, color);
             }
 
-            private void DrawDiscWireframe(float3 localOrigin, int2 center, int radius, Color color, float heightOffset)
+            void DrawDisc(float3 localOrigin, int2 center, int radius, Color color, float heightOffset)
             {
-                if (radius < 0) return;
-                var centerGridPos = Basis.ToGridSpace(localOrigin) + new float2(center.x * CellSize, center.y * CellSize);
-                var worldCenter = Basis.ToWorldSpace(centerGridPos, heightOffset);
+                if (radius < 0)
+                {
+                    return;
+                }
 
-                var r = (radius + 0.5f) * CellSize;
-                Drawer.Circle(worldCenter, Basis.Normal * r, color);
+                float2 grid = Basis.ToGridSpace(localOrigin) + new float2(center.x * CellSize, center.y * CellSize);
+                Drawer.Circle(Basis.ToWorldSpace(grid, heightOffset), Basis.Normal * ((radius + 0.5f) * CellSize), color);
             }
 
-            private void DrawCapsuleWireframe(float3 localOrigin, int2 a, int2 b, int radius, Color color, float heightOffset)
+            void DrawCapsule(float3 localOrigin, int2 a, int2 b, int radius, Color color, float heightOffset)
             {
-                if (radius < 0) return;
+                if (radius < 0)
+                {
+                    return;
+                }
 
-                var localGridSpace = Basis.ToGridSpace(localOrigin);
-                var centerA = Basis.ToWorldSpace(localGridSpace + new float2(a.x * CellSize, a.y * CellSize), heightOffset);
-                var centerB = Basis.ToWorldSpace(localGridSpace + new float2(b.x * CellSize, b.y * CellSize), heightOffset);
-                var r = (radius + 0.5f) * CellSize;
+                float2 grid = Basis.ToGridSpace(localOrigin);
+                float3 centerA = Basis.ToWorldSpace(grid + new float2(a.x * CellSize, a.y * CellSize), heightOffset);
+                float3 centerB = Basis.ToWorldSpace(grid + new float2(b.x * CellSize, b.y * CellSize), heightOffset);
+                float r = (radius + 0.5f) * CellSize;
 
                 Drawer.Circle(centerA, Basis.Normal * r, color);
                 Drawer.Circle(centerB, Basis.Normal * r, color);
 
                 if (math.any(a != b))
                 {
-                    var dir = math.normalize(centerB - centerA);
-                    var right = math.cross(Basis.Normal, dir) * r;
+                    float3 direction = math.normalize(centerB - centerA);
+                    float3 right = math.cross(Basis.Normal, direction) * r;
                     Drawer.Line(centerA + right, centerB + right, color);
                     Drawer.Line(centerA - right, centerB - right, color);
                 }
@@ -247,7 +257,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         }
 
         [BurstCompile]
-        private struct DrawGridJob : IJob
+        struct DrawGridJob : IJob
         {
             public Drawer Drawer;
             public Color PositiveColor;
@@ -261,29 +271,29 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             [ReadOnly] public NativeArray<int> ActiveSlots;
             [ReadOnly] public NativeArray<int2> CoordBySlot;
             [ReadOnly] public NativeArray<int> Data;
-
-            public int ChunkSize;
-            public int Stride;
-            public int Dimension;
+            public GridSpec Spec;
 
             public void Execute()
             {
-                float renderHeightOffset = 0.05f;
+                const float renderHeight = 0.05f;
+                int chunkSize = Spec.ChunkSize;
+                int stride = Spec.Stride;
+                int elements = Spec.ElementsPerChunk;
 
                 for (int i = 0; i < ActiveSlots.Length; i++)
                 {
-                    int slotIdx = ActiveSlots[i];
-                    int2 coord = CoordBySlot[slotIdx];
-                    int baseDataIdx = slotIdx * Stride * Dimension;
-
-                    float2 chunkGridOrigin = new float2(coord.x * ChunkSize, coord.y * ChunkSize) * CellSize;
+                    int slot = ActiveSlots[i];
+                    int2 coord = CoordBySlot[slot];
+                    int baseIndex = slot * elements;
+                    float2 chunkOrigin = new float2(coord.x * chunkSize, coord.y * chunkSize) * CellSize;
 
                     if (DrawGrid)
                     {
-                        float3 p0 = Basis.ToWorldSpace(chunkGridOrigin, renderHeightOffset);
-                        float3 p1 = Basis.ToWorldSpace(chunkGridOrigin + new float2(ChunkSize * CellSize, 0), renderHeightOffset);
-                        float3 p2 = Basis.ToWorldSpace(chunkGridOrigin + new float2(ChunkSize * CellSize, ChunkSize * CellSize), renderHeightOffset);
-                        float3 p3 = Basis.ToWorldSpace(chunkGridOrigin + new float2(0, ChunkSize * CellSize), renderHeightOffset);
+                        float edge = chunkSize * CellSize;
+                        float3 p0 = Basis.ToWorldSpace(chunkOrigin, renderHeight);
+                        float3 p1 = Basis.ToWorldSpace(chunkOrigin + new float2(edge, 0), renderHeight);
+                        float3 p2 = Basis.ToWorldSpace(chunkOrigin + new float2(edge, edge), renderHeight);
+                        float3 p3 = Basis.ToWorldSpace(chunkOrigin + new float2(0, edge), renderHeight);
 
                         Drawer.Line(p0, p1, GridColor);
                         Drawer.Line(p1, p2, GridColor);
@@ -291,37 +301,38 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                         Drawer.Line(p3, p0, GridColor);
                     }
 
-                    if (DrawValues)
+                    if (!DrawValues)
                     {
-                        for (int y = 0; y < ChunkSize; y++)
+                        continue;
+                    }
+
+                    for (int y = 0; y < chunkSize; y++)
+                    {
+                        for (int x = 0; x < chunkSize; x++)
                         {
-                            for (int x = 0; x < ChunkSize; x++)
+                            int value = Data[baseIndex + y * stride + x];
+                            if (value == 0)
                             {
-                                int val = Data[baseDataIdx + y * Stride + x];
-                                if (val == 0) continue;
-
-                                float2 cellGridPos = chunkGridOrigin + new float2(x * CellSize, y * CellSize);
-                                float2 cellCenter = cellGridPos + new float2(CellSize * 0.5f);
-                                float3 worldCenter = Basis.ToWorldSpace(cellCenter, renderHeightOffset);
-
-                                Color cellColor = val > 0 ? PositiveColor : NegativeColor;
-
-                                float intensity = math.clamp(math.abs(val) / 10f, 0.15f, 0.75f);
-                                Color quadColor = cellColor;
-                                quadColor.a *= intensity;
-
-                                float pad = CellSize * 0.05f;
-                                float3 c0 = Basis.ToWorldSpace(cellGridPos + new float2(pad, pad), renderHeightOffset);
-                                float3 c1 = Basis.ToWorldSpace(cellGridPos + new float2(CellSize - pad, pad), renderHeightOffset);
-                                float3 c2 = Basis.ToWorldSpace(cellGridPos + new float2(CellSize - pad, CellSize - pad), renderHeightOffset);
-                                float3 c3 = Basis.ToWorldSpace(cellGridPos + new float2(pad, CellSize - pad), renderHeightOffset);
-
-                                Drawer.Quad(c0, c1, c2, c3, quadColor);
-
-                                FixedString32Bytes text = default;
-                                text.Append(val);
-                                Drawer.Text32(worldCenter, text, cellColor, 12f);
+                                continue;
                             }
+
+                            float2 cellGrid = chunkOrigin + new float2(x * CellSize, y * CellSize);
+                            Color baseColor = value > 0 ? PositiveColor : NegativeColor;
+
+                            Color fill = baseColor;
+                            fill.a *= math.clamp(math.abs(value) / 10f, 0.15f, 0.75f);
+
+                            float pad = CellSize * 0.05f;
+                            float3 c0 = Basis.ToWorldSpace(cellGrid + new float2(pad, pad), renderHeight);
+                            float3 c1 = Basis.ToWorldSpace(cellGrid + new float2(CellSize - pad, pad), renderHeight);
+                            float3 c2 = Basis.ToWorldSpace(cellGrid + new float2(CellSize - pad, CellSize - pad), renderHeight);
+                            float3 c3 = Basis.ToWorldSpace(cellGrid + new float2(pad, CellSize - pad), renderHeight);
+
+                            Drawer.Quad(c0, c1, c2, c3, fill);
+
+                            FixedString32Bytes text = default;
+                            text.Append(value);
+                            Drawer.Text32(Basis.ToWorldSpace(cellGrid + new float2(CellSize * 0.5f), renderHeight), text, baseColor, 12f);
                         }
                     }
                 }

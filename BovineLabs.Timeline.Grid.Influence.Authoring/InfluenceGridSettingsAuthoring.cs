@@ -10,17 +10,17 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
     [SettingsGroup("Grid")]
     public class InfluenceGridSettingsAuthoring : SettingsBase
     {
-        [Tooltip("Size of a single grid cell in world units.")]
+        [Tooltip("World units per grid cell.")]
         public float CellSize = 1f;
 
-        [Tooltip("Normal vector of the grid plane.")]
+        [Tooltip("Normal of the grid plane.")]
         public Vector3 PlaneNormal = Vector3.up;
 
-        [Tooltip("Power of two exponent for chunk size (e.g., 4 = 16x16 chunks).")]
+        [Tooltip("Chunk edge = 2^this (4 = 16x16).")]
         [Range(1, 8)]
         public int ChunkSizePowerOfTwo = 4;
 
-        [Tooltip("Number of frames to retain inactive chunks before their slots can be reused.")]
+        [Tooltip("Frames an idle chunk's slot is retained before reuse.")]
         [Min(0)]
         public int ChunkRetentionFrames = 300;
 
@@ -31,7 +31,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             {
                 CellSize = math.max(0.01f, CellSize),
                 PlaneNormal = math.normalizesafe(PlaneNormal, math.up()),
-                ChunkSizePowerOfTwo = ChunkSizePowerOfTwo,
+                ChunkSizePowerOfTwo = math.clamp(ChunkSizePowerOfTwo, 1, 8),
                 ChunkRetentionFrames = (uint)math.max(0, ChunkRetentionFrames)
             });
         }

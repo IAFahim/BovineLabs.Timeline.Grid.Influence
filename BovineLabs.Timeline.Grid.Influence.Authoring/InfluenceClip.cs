@@ -2,6 +2,7 @@ using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Entities;
 using Unity.Mathematics;
+using UnityEngine;
 using UnityEngine.Timeline;
 
 namespace BovineLabs.Timeline.Grid.Influence.Authoring
@@ -9,46 +10,31 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
     [System.Serializable]
     public sealed class InfluenceClip : DOTSClip, ITimelineClipAsset
     {
-        [UnityEngine.Header("Shape Configuration")]
-        [UnityEngine.Tooltip("The type of shape to apply to the grid.")]
-        public ShapeKind kind = ShapeKind.Disc;
+        [Header("Shape")]
+        public ShapeKind Kind = ShapeKind.Disc;
+        public int Weight = 1;
 
-        [UnityEngine.Tooltip("Weight for this influence stamp. Positive values add, negative subtract.")]
-        public int weight = 1;
+        [Header("Solid Rect / Rect Shell")]
+        public Vector2Int RectMin = new(-5, -5);
+        public Vector2Int RectSize = new(10, 10);
+        public int ShellThickness = 1;
 
-        [UnityEngine.Header("Solid Rect / Rect Shell")]
-        [UnityEngine.Tooltip("Minimum corner of the rectangle (grid coordinates).")]
-        public UnityEngine.Vector2Int rectMin = new UnityEngine.Vector2Int(-5, -5);
+        [Header("Disc")]
+        public Vector2Int DiscCenter = Vector2Int.zero;
+        public int DiscRadius = 5;
 
-        [UnityEngine.Tooltip("Size of the rectangle in grid cells.")]
-        public UnityEngine.Vector2Int rectSize = new UnityEngine.Vector2Int(10, 10);
+        [Header("Annulus")]
+        public Vector2Int AnnulusCenter = Vector2Int.zero;
+        public int AnnulusOuterRadius = 5;
+        public int AnnulusInnerRadius = 3;
 
-        [UnityEngine.Tooltip("Thickness of the shell for RectShell shapes.")]
-        public int shellThickness = 1;
+        [Header("Capsule")]
+        public Vector2Int CapsuleStart = new(-3, 0);
+        public Vector2Int CapsuleEnd = new(3, 5);
+        public int CapsuleRadius = 5;
 
-        [UnityEngine.Header("Disc / Annulus")]
-        [UnityEngine.Tooltip("Center of the circle (grid coordinates).")]
-        public UnityEngine.Vector2Int circleCenter = UnityEngine.Vector2Int.zero;
-
-        [UnityEngine.Tooltip("Outer radius in grid cells.")]
-        public int outerRadius = 5;
-
-        [UnityEngine.Tooltip("Inner radius for annulus shapes (must be less than outerRadius).")]
-        public int innerRadius = 3;
-
-        [UnityEngine.Header("Capsule")]
-        [UnityEngine.Tooltip("First endpoint of the capsule (grid coordinates).")]
-        public UnityEngine.Vector2Int capsuleA = new UnityEngine.Vector2Int(-3, 0);
-
-        [UnityEngine.Tooltip("Second endpoint of the capsule (grid coordinates).")]
-        public UnityEngine.Vector2Int capsuleB = new UnityEngine.Vector2Int(3, 5);
-
-        [UnityEngine.Tooltip("Capsule radius in grid cells.")]
-        public int capsuleRadius = 5;
-
-        [UnityEngine.Header("Transform")]
-        [UnityEngine.Tooltip("Local offset from the entity's world position.")]
-        public UnityEngine.Vector3 localOffset;
+        [Header("Transform")]
+        public Vector3 LocalOffset;
 
         public override double duration => 1.0;
 
@@ -59,7 +45,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             context.Baker.AddComponent(clipEntity, new InfluenceClipData
             {
                 Shape = BuildShape(),
-                LocalOffset = localOffset
+                LocalOffset = LocalOffset
             });
 
             base.Bake(clipEntity, context);
@@ -67,32 +53,32 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
         InfluenceShape BuildShape()
         {
-            int2 rectMinCell = new int2(rectMin.x, rectMin.y);
-            int2 rectSizeCell = new int2(rectSize.x, rectSize.y);
-            int2 circleCenterCell = new int2(circleCenter.x, circleCenter.y);
-            int2 capsuleACell = new int2(capsuleA.x, capsuleA.y);
-            int2 capsuleBCell = new int2(capsuleB.x, capsuleB.y);
+            int2 rectMin = new(RectMin.x, RectMin.y);
+            int2 rectSize = new(RectSize.x, RectSize.y);
+            int2 discCenter = new(DiscCenter.x, DiscCenter.y);
+            int2 annulusCenter = new(AnnulusCenter.x, AnnulusCenter.y);
+            int2 capsuleStart = new(CapsuleStart.x, CapsuleStart.y);
+            int2 capsuleEnd = new(CapsuleEnd.x, CapsuleEnd.y);
 
-            switch (kind)
+            return Kind switch
             {
-                case ShapeKind.SolidRect:
-                    return InfluenceShape.SolidRect(rectMinCell, rectSizeCell, weight);
+                ShapeKind.SolidRect => InfluenceShape.SolidRect(rectMin, rectSize, Weight),
+                ShapeKind.RectShell => InfluenceShape.RectShell(rectMin, rectSize, ShellThickness, Weight),
+                ShapeKind.Disc => InfluenceShape.Disc(discCenter, DiscRadius, Weight),
+                ShapeKind.Annulus => InfluenceShape.Annulus(annulusCenter, AnnulusOuterRadius, AnnulusInnerRadius, Weight),
+                ShapeKind.Capsule => InfluenceShape.Capsule(capsuleStart, capsuleEnd, CapsuleRadius, Weight),
+                _ => InfluenceShape.Disc(discCenter, DiscRadius, Weight)
+            };
+        }
 
-                case ShapeKind.RectShell:
-                    return InfluenceShape.RectShell(rectMinCell, rectSizeCell, shellThickness, weight);
-
-                case ShapeKind.Disc:
-                    return InfluenceShape.Disc(circleCenterCell, outerRadius, weight);
-
-                case ShapeKind.Annulus:
-                    return InfluenceShape.Annulus(circleCenterCell, outerRadius, innerRadius, weight);
-
-                case ShapeKind.Capsule:
-                    return InfluenceShape.Capsule(capsuleACell, capsuleBCell, capsuleRadius, weight);
-
-                default:
-                    return InfluenceShape.Disc(circleCenterCell, outerRadius, weight);
-            }
+        void OnValidate()
+        {
+            RectSize = new Vector2Int(math.max(0, RectSize.x), math.max(0, RectSize.y));
+            ShellThickness = math.max(1, ShellThickness);
+            DiscRadius = math.max(0, DiscRadius);
+            AnnulusOuterRadius = math.max(0, AnnulusOuterRadius);
+            AnnulusInnerRadius = math.clamp(AnnulusInnerRadius, -1, AnnulusOuterRadius - 1);
+            CapsuleRadius = math.max(0, CapsuleRadius);
         }
     }
 }

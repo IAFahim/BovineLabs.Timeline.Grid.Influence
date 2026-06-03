@@ -30,21 +30,11 @@ namespace BovineLabs.Timeline.Grid.Influence
             {
                 state.EntityManager.AddComponent<InfluenceFieldSingleton>(state.EntityManager.CreateEntity());
             }
-
-            if (!SystemAPI.HasSingleton<InfluenceFieldDependency>())
-            {
-                state.EntityManager.AddComponent<InfluenceFieldDependency>(state.EntityManager.CreateEntity());
-            }
         }
 
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            if (SystemAPI.TryGetSingleton<InfluenceFieldDependency>(out var dependency))
-            {
-                dependency.Value.Complete();
-            }
-
             state.Dependency.Complete();
 
             if (SystemAPI.TryGetSingletonRW<InfluenceFieldSingleton>(out var fieldRw) && fieldRw.ValueRO.Field.IsCreated)
@@ -58,44 +48,40 @@ namespace BovineLabs.Timeline.Grid.Influence
         {
             var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
             var fieldRw = SystemAPI.GetSingletonRW<InfluenceFieldSingleton>();
-            var dependencyRw = SystemAPI.GetSingletonRW<InfluenceFieldDependency>();
-
             var field = fieldRw.ValueRO.Field;
+
             if (!field.IsCreated)
             {
                 field = InfluenceField.Create(
-                    1 << settings.ChunkSizePowerOfTwo,
-                    settings.ChunkRetentionFrames,
+                    GridSpec.FromPowerOfTwo(settings.ChunkSizePowerOfTwo, settings.ChunkRetentionFrames),
                     Allocator.Persistent);
             }
 
             int count = _activeQuery.CalculateEntityCount();
-            JobHandle publishedDependency = dependencyRw.ValueRO.Value;
 
             JobHandle handle;
             if (count == 0)
             {
-                handle = field.ScheduleBatched(default, publishedDependency);
+                handle = field.Schedule(default, default);
             }
             else
             {
                 var stamps = new NativeList<Stamp>(count, state.WorldUpdateAllocator);
 
-                var gather = new GatherStampsJob
+                JobHandle gather = new GatherStampsJob
                 {
                     Stamps = stamps.AsParallelWriter(),
-                    CellSize = settings.CellSize,
+                    CellSize = math.max(0.0001f, settings.CellSize),
                     Basis = new GridBasis(settings.PlaneNormal),
                     LocalToWorldLookup = SystemAPI.GetComponentLookup<LocalToWorld>(true)
                 }.ScheduleParallel(_activeQuery, state.Dependency);
 
                 gather.Complete();
 
-                handle = field.ScheduleBatched(stamps.AsArray(), publishedDependency);
+                handle = field.Schedule(stamps.AsArray(), default);
             }
 
             fieldRw.ValueRW.Field = field;
-            dependencyRw.ValueRW.Value = handle;
             state.Dependency = handle;
         }
 
@@ -110,12 +96,12 @@ namespace BovineLabs.Timeline.Grid.Influence
 
             void Execute(in InfluenceClipData clip, in TrackBinding binding)
             {
-                if (binding.Value == Entity.Null || !LocalToWorldLookup.TryGetComponent(binding.Value, out var ltw))
+                if (binding.Value == Entity.Null || !LocalToWorldLookup.TryGetComponent(binding.Value, out var localToWorld))
                 {
                     return;
                 }
 
-                float3 world = ltw.Position + math.rotate(ltw.Rotation, clip.LocalOffset);
+                float3 world = localToWorld.Position + math.rotate(localToWorld.Rotation, clip.LocalOffset);
                 float2 projected = Basis.ToGridSpace(world);
 
                 int2 origin = new int2(

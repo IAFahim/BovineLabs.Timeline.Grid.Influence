@@ -47,7 +47,7 @@ namespace BovineLabs.Timeline.Grid.Influence
             ref var fieldSingleton = ref SystemAPI.GetSingletonRW<FieldRegistrySingleton>().ValueRW;
 
             var activeQuery = SystemAPI.QueryBuilder()
-                .WithAll<InfluenceClipData, TrackBinding, ClipActive, ClipWeight>()
+                .WithAll<InfluenceClipData, InfluenceStampElement, TrackBinding, ClipActive, ClipWeight>()
                 .Build();
 
             state.Dependency = new GatherStampsJob
@@ -78,40 +78,55 @@ namespace BovineLabs.Timeline.Grid.Influence
             public float CellSize;
             public GridBasis Basis;
 
-            private void Execute(in InfluenceClipData clip, in TrackBinding binding, in ClipWeight weight)
+            private void Execute(in InfluenceClipData clip, in DynamicBuffer<InfluenceStampElement> extras,
+                in TrackBinding binding, in ClipWeight weight)
             {
-                if (!KeyToSlot.TryGetValue(clip.FieldKey, out var slotIndex)) return;
+                if (!KeyToSlot.TryGetValue(clip.FieldKey, out var slotIndex))
+                    return;
 
                 var targetEntity = binding.Value;
-                if (targetEntity == Entity.Null) return;
+                if (targetEntity == Entity.Null)
+                    return;
 
-                var originEntity = targetEntity;
-
-                if (clip.OriginTarget != Target.None && clip.OriginTarget != Target.Self)
-                {
-                    var targets = TargetsLookup.TryGetComponent(targetEntity, out var t) ? t : default;
-                    var baseTarget = targets.Get(clip.OriginTarget, targetEntity);
-                    if (baseTarget != Entity.Null)
-                    {
-                        originEntity = baseTarget;
-                        if (clip.OriginLinkKey != 0 && EntityLinkResolver.TryResolve(baseTarget, clip.OriginLinkKey,
-                                LinkSources, Links, out var linked)) originEntity = linked;
-                    }
-                }
-
-                if (!LocalToWorldLookup.TryGetComponent(originEntity, out var localToWorld)) return;
-
-                var scaledWeight = (int)math.round(clip.Shape.Weight * weight.Value);
-                if (scaledWeight == 0) return;
+                var originEntity = ResolveOrigin(clip, targetEntity);
+                if (!LocalToWorldLookup.TryGetComponent(originEntity, out var localToWorld))
+                    return;
 
                 var world = localToWorld.Position + math.rotate(localToWorld.Rotation, clip.LocalOffset);
                 var projected = Basis.ToGridSpace(world);
-
                 var origin = new int2(
                     (int)math.floor(projected.x / CellSize),
                     (int)math.floor(projected.y / CellSize));
 
-                StampsMap.Add(slotIndex, new Stamp(clip.Shape.WithWeight(scaledWeight), origin));
+                Emit(slotIndex, clip.Shape, weight.Value, origin);
+                for (var i = 0; i < extras.Length; i++)
+                    Emit(slotIndex, extras[i].Shape, weight.Value, origin);
+            }
+
+            private Entity ResolveOrigin(in InfluenceClipData clip, Entity targetEntity)
+            {
+                if (clip.OriginTarget == Target.None || clip.OriginTarget == Target.Self)
+                    return targetEntity;
+
+                var targets = TargetsLookup.TryGetComponent(targetEntity, out var t) ? t : default;
+                var baseTarget = targets.Get(clip.OriginTarget, targetEntity);
+                if (baseTarget == Entity.Null)
+                    return targetEntity;
+
+                if (clip.OriginLinkKey != 0 &&
+                    EntityLinkResolver.TryResolve(baseTarget, clip.OriginLinkKey, LinkSources, Links, out var linked))
+                    return linked;
+
+                return baseTarget;
+            }
+
+            private void Emit(int slotIndex, in InfluenceShape shape, float clipWeight, int2 origin)
+            {
+                var scaledWeight = (int)math.round(shape.Weight * clipWeight);
+                if (scaledWeight == 0)
+                    return;
+
+                StampsMap.Add(slotIndex, new Stamp(shape.WithWeight(scaledWeight), origin));
             }
         }
     }

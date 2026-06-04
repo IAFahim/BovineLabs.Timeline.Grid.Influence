@@ -15,7 +15,9 @@
     "Unity.Collections",
     "Unity.Entities",
     "Unity.Mathematics",
-    "Unity.Transforms"
+    "Unity.Transforms",
+    "Unity.Timeline",
+    "Unity.Timeline.Editor"
   ],
   "includePlatforms": [
     "Editor"

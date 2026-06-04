@@ -4,13 +4,21 @@ using UnityEngine;
 
 namespace BovineLabs.Timeline.Grid.Influence.Authoring
 {
-    [AutoRef("InfluenceGridSettings", "Fields", "GridFieldSchemaObject", "Schemas/GridFields/")]
+    [AutoRef(nameof(InfluenceGridSettingsAuthoring), nameof(InfluenceGridSettingsAuthoring.Fields), "GridField", "Schemas/GridFields")]
     [CreateAssetMenu(menuName = "BovineLabs/Grid/Field Schema")]
     public class GridFieldSchemaObject : ScriptableObject, IUID
     {
-        [SerializeField] [InspectorReadOnly] private ushort id;
-        public ushort Id => id;
-        int IUID.ID { get => id; set => id = (ushort)value; }
+        [SerializeField]
+        [InspectorReadOnly]
+        private int id;
+
+        public ushort Id => (ushort)this.id;
+
+        int IUID.ID
+        {
+            get => this.id;
+            set => this.id = value;
+        }
 
         public string FieldName = "New Field";
         [Range(1, 8)] public int ChunkPower = 4;

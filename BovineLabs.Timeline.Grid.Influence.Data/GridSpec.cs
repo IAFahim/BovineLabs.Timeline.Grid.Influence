@@ -12,6 +12,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public readonly int ElementsPerChunk;
         public readonly uint RetentionFrames;
 
+        const int SeamColumns = 1;
+
         GridSpec(int log2, int chunkSize, int dimension, int stride, int elementsPerChunk, uint retentionFrames)
         {
             Log2 = log2;
@@ -26,8 +28,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             int log2 = math.clamp(chunkSizePowerOfTwo, 1, 8);
             int chunkSize = 1 << log2;
-            int dimension = chunkSize + 1;
-            int alignMask = strideAlignment - 1;
+            int dimension = chunkSize + SeamColumns;
+            int alignment = math.ceilpow2(math.max(1, strideAlignment));
+            int alignMask = alignment - 1;
             int stride = (dimension + alignMask) & ~alignMask;
             int elementsPerChunk = stride * dimension;
             return new GridSpec(log2, chunkSize, dimension, stride, elementsPerChunk, retentionFrames);
@@ -41,6 +44,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int2 ChunkBaseOf(int2 coord, int log2) => new(coord.x << log2, coord.y << log2);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ChunkRange ChunkRangeOf(in CellRect bounds, int log2)
+            => new(
+                new int2(bounds.Min.x >> log2, bounds.Min.y >> log2),
+                new int2((bounds.Max.x - 1) >> log2, (bounds.Max.y - 1) >> log2));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int2 LocalOf(int2 cell, int2 chunkBase) => cell - chunkBase;

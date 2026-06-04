@@ -23,6 +23,18 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         }
     }
 
+    public readonly struct ChunkRange
+    {
+        public readonly int2 Min;
+        public readonly int2 Max;
+
+        public ChunkRange(int2 min, int2 max)
+        {
+            Min = min;
+            Max = max;
+        }
+    }
+
     public readonly struct WeightedRect
     {
         public readonly CellRect Bounds;

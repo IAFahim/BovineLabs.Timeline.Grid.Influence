@@ -248,7 +248,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 SpreadDenominator = stencil.SpreadDenominator
             }.Schedule(combined);
 
-            NativeArray<Stamp> rasterizeStamps = disposeStamps ? localStamps : localStamps;
+            NativeArray<Stamp> rasterizeStamps = localStamps;
 
             JobHandle rasterize = new RasterizeJob
             {
@@ -396,13 +396,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
                     CellRect bounds = span.Bounds;
                     int weight = span.Weight;
-                    int cx0 = bounds.Min.x >> log2;
-                    int cy0 = bounds.Min.y >> log2;
-                    int cx1 = (bounds.Max.x - 1) >> log2;
-                    int cy1 = (bounds.Max.y - 1) >> log2;
+                    ChunkRange chunks = ChunkMath.ChunkRangeOf(bounds, log2);
 
-                    for (int cy = cy0; cy <= cy1; cy++)
-                    for (int cx = cx0; cx <= cx1; cx++)
+                    for (int cy = chunks.Min.y; cy <= chunks.Max.y; cy++)
+                    for (int cx = chunks.Min.x; cx <= chunks.Max.x; cx++)
                     {
                         if (!SlotByCoord.TryGetValue(new int2(cx, cy), out int slot)) continue;
 

@@ -48,29 +48,34 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Diffusion
                 {
                     Name = "Diffusion",
                     ChunkPower = settings.ChunkSizePowerOfTwo,
-                    RetentionFrames = 10,
+                    RetentionFrames = uint.MaxValue,
                     HasFeedback = true,
                 }, Allocator.Persistent);
                 var e = state.EntityManager.CreateEntity();
-                state.EntityManager.AddComponentData(e, new DiffusionFieldConfig { Id = id, SpreadDenominator = 4, DecayPerMille = 30 }); // Fire default
-                
-                // Guard first frame to establish double-buffer precondition
+                state.EntityManager.AddComponentData(e, new DiffusionFieldConfig { Id = id, SpreadDenominator = 5, DecayPerMille = 30 });
+
                 return;
             }
 
             var config = SystemAPI.GetSingleton<DiffusionFieldConfig>();
             ref var pair = ref regSingleton.Registry.Slot(config.Id.Value);
 
-            // Diffusion Feedback Schedule
             if (pair.Front.IsCreated)
             {
                 var spec = pair.Front.Spec;
-                int maxCells = pair.Front.ActiveChunkCount * spec.ChunkSize * spec.ChunkSize;
-                int emitCapacity = math.max(16, maxCells * 5); 
+                int emitCapacity = math.max(1024, pair.Front.ActiveSlotCount * pair.Front.Spec.ElementsPerChunk * 5); 
                 
                 if (!pair.PendingStamps.IsCreated)
                 {
                     pair.PendingStamps = new NativeList<Stamp>(emitCapacity, state.WorldUpdateAllocator);
+                }
+                else
+                {
+                    pair.WriterDependency = new ResizeStampListJob
+                    {
+                        List = pair.PendingStamps,
+                        MinCapacity = pair.PendingStamps.Length + emitCapacity
+                    }.Schedule(pair.WriterDependency);
                 }
 
                 JobHandle feedback = new DiffusionFeedbackJob
@@ -171,7 +176,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Diffusion
                     int keep = vp - 4 * q;
                     int2 c = new int2(baseX + x, baseY + y);
 
-                    // AddNoResize must not exceed allocated capacity!
                     if (keep != 0) Emit.AddNoResize(new Stamp(InfluenceShape.SolidRect(c, new int2(1, 1), keep), int2.zero));
                     if (q != 0)
                     {

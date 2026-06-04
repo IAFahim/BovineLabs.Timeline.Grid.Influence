@@ -25,6 +25,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public GridSpec Spec => _spec;
         public uint FrameId => _frameId;
         public JobHandle Dependency => _dependency;
+        public int ActiveSlotCount => _activeSlots.Length;
 
         public static InfluenceField Create(in GridSpec spec, Allocator allocator)
         {
@@ -69,60 +70,64 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public JobHandle Schedule(NativeArray<Stamp> stamps, JobHandle dependsOn)
         {
             ThrowIfNotCreated();
-            JobHandle.CombineDependencies(_dependency, dependsOn).Complete();
-            _dependency = default;
+            JobHandle combined = JobHandle.CombineDependencies(_dependency, dependsOn);
 
             AdvanceFrame();
             EvictStale();
             _activeSlots.Clear();
 
-            int stampCount = stamps.IsCreated ? stamps.Length : 0;
-            if (stampCount == 0)
+            if (!stamps.IsCreated)
             {
-                _dependency = default;
-                return default;
+                _dependency = combined;
+                return combined;
             }
 
-            NativeArray<int> offsets = new NativeArray<int>(stampCount + 1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
-            int totalSpans = PrepareSlotsAndOffsets(stamps, offsets);
+            NativeList<int> offsets = new NativeList<int>(1, Allocator.TempJob);
+            NativeList<WeightedRect> spans = new NativeList<WeightedRect>(1, Allocator.TempJob);
 
-            if (_activeSlots.Length == 0 || totalSpans == 0)
+            JobHandle prepare = new PrepareSlotsAndOffsetsJob
             {
-                offsets.Dispose();
-                _dependency = default;
-                return default;
-            }
-
-            NativeArray<WeightedRect> spans = new NativeArray<WeightedRect>(totalSpans, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+                Stamps = stamps,
+                Offsets = offsets,
+                Spans = spans,
+                SlotByCoord = _slotByCoord,
+                FreeSlots = _freeSlots,
+                CoordBySlot = _coordBySlot,
+                LastWrittenBySlot = _lastWrittenBySlot,
+                ActiveSlots = _activeSlots,
+                Data = _data,
+                Spec = _spec,
+                FrameId = _frameId
+            }.Schedule(combined);
 
             JobHandle rasterize = new RasterizeJob
             {
                 Stamps = stamps,
-                Offsets = offsets,
-                Spans = spans
-            }.Schedule(stampCount, 8);
+                Offsets = offsets.AsDeferredJobArray(),
+                Spans = spans.AsDeferredJobArray()
+            }.Schedule(prepare);
 
             JobHandle clear = new ClearJob
             {
-                ActiveSlots = _activeSlots.AsArray(),
-                Data = _data.AsArray(),
+                ActiveSlots = _activeSlots.AsDeferredJobArray(),
+                Data = _data.AsDeferredJobArray(),
                 ElementsPerChunk = _spec.ElementsPerChunk
-            }.Schedule(_activeSlots.Length, 1);
+            }.Schedule(_activeSlots, 1, prepare);
 
             JobHandle scatter = new ScatterJob
             {
-                Spans = spans,
+                Spans = spans.AsDeferredJobArray(),
                 SlotByCoord = _slotByCoord.AsReadOnly(),
-                Data = _data.AsArray(),
+                Data = _data.AsDeferredJobArray(),
                 Spec = _spec
             }.Schedule(JobHandle.CombineDependencies(rasterize, clear));
 
             JobHandle resolve = new ResolveJob
             {
-                ActiveSlots = _activeSlots.AsArray(),
-                Data = _data.AsArray(),
+                ActiveSlots = _activeSlots.AsDeferredJobArray(),
+                Data = _data.AsDeferredJobArray(),
                 Spec = _spec
-            }.Schedule(_activeSlots.Length, 1, scatter);
+            }.Schedule(_activeSlots, 1, scatter);
 
             JobHandle cleanup = JobHandle.CombineDependencies(spans.Dispose(resolve), offsets.Dispose(rasterize));
             _dependency = cleanup;
@@ -164,80 +169,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             return handle;
         }
 
-        int PrepareSlotsAndOffsets(NativeArray<Stamp> stamps, NativeArray<int> offsets)
-        {
-            long running = 0;
-            for (int i = 0; i < stamps.Length; i++)
-            {
-                offsets[i] = IntegerMath.ClampToInt(running);
-                InfluenceShape shape = stamps[i].Shape;
-                running += Rasterizer.EstimateSpanCount(shape);
-                ActivateBounds(Rasterizer.Bounds(shape, stamps[i].Origin));
-            }
-
-            offsets[stamps.Length] = IntegerMath.ClampToInt(running);
-            return offsets[stamps.Length];
-        }
-
-        void ActivateBounds(in CellRect bounds)
-        {
-            if (bounds.IsEmpty)
-            {
-                return;
-            }
-
-            int cx0 = bounds.Min.x >> _spec.Log2;
-            int cy0 = bounds.Min.y >> _spec.Log2;
-            int cx1 = (bounds.Max.x - 1) >> _spec.Log2;
-            int cy1 = (bounds.Max.y - 1) >> _spec.Log2;
-
-            for (int cy = cy0; cy <= cy1; cy++)
-            {
-                for (int cx = cx0; cx <= cx1; cx++)
-                {
-                    Activate(new int2(cx, cy));
-                }
-            }
-        }
-
-        void Activate(int2 coord)
-        {
-            int slot = EnsureSlot(coord);
-            if (_lastWrittenBySlot[slot] == _frameId)
-            {
-                return;
-            }
-
-            _lastWrittenBySlot[slot] = _frameId;
-            _activeSlots.Add(slot);
-        }
-
-        int EnsureSlot(int2 coord)
-        {
-            if (_slotByCoord.TryGetValue(coord, out int existing))
-            {
-                return existing;
-            }
-
-            int slot;
-            if (_freeSlots.Length > 0)
-            {
-                slot = _freeSlots[_freeSlots.Length - 1];
-                _freeSlots.RemoveAtSwapBack(_freeSlots.Length - 1);
-                _coordBySlot[slot] = coord;
-                _lastWrittenBySlot[slot] = 0;
-            }
-            else
-            {
-                slot = _coordBySlot.Length;
-                _coordBySlot.Add(coord);
-                _lastWrittenBySlot.Add(0);
-                _data.ResizeUninitialized(_data.Length + _spec.ElementsPerChunk);
-            }
-
-            _slotByCoord.Add(coord, slot);
-            return slot;
-        }
+        // PrepareSlotsAndOffsets logic moved to PrepareSlotsAndOffsetsJob
 
         void AdvanceFrame()
         {
@@ -285,24 +217,25 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         }
 
         [BurstCompile]
-        struct RasterizeJob : IJobParallelFor
+        struct RasterizeJob : IJob
         {
             [ReadOnly] public NativeArray<Stamp> Stamps;
             [ReadOnly] public NativeArray<int> Offsets;
-            [NativeDisableParallelForRestriction] public NativeArray<WeightedRect> Spans;
+            public NativeArray<WeightedRect> Spans;
 
-            public void Execute(int index)
+            public void Execute()
             {
-                int start = Offsets[index];
-                int capacity = Offsets[index + 1] - start;
-                SpanSink sink = new SpanSink((WeightedRect*)Spans.GetUnsafePtr() + start, capacity);
-                Rasterizer.Emit(Stamps[index], ref sink);
-                sink.SealRemaining();
+                for (int index = 0; index < Stamps.Length; index++)
+                {
+                    SpanSink sink = new SpanSink((WeightedRect*)Spans.GetUnsafePtr() + Offsets[index], Offsets[index + 1] - Offsets[index]);
+                    Rasterizer.Emit(Stamps[index], ref sink);
+                    sink.SealRemaining();
+                }
             }
         }
 
         [BurstCompile]
-        struct ClearJob : IJobParallelFor
+        struct ClearJob : IJobParallelForDefer
         {
             [ReadOnly] public NativeArray<int> ActiveSlots;
             [NativeDisableParallelForRestriction] public NativeArray<int> Data;
@@ -379,7 +312,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         }
 
         [BurstCompile]
-        struct ResolveJob : IJobParallelFor
+        struct ResolveJob : IJobParallelForDefer
         {
             [ReadOnly] public NativeArray<int> ActiveSlots;
             [NativeDisableParallelForRestriction] public NativeArray<int> Data;

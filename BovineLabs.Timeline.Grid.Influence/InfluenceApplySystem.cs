@@ -9,6 +9,7 @@ using Unity.Transforms;
 
 namespace BovineLabs.Timeline.Grid.Influence
 {
+    [DisableAutoCreation]
     [UpdateInGroup(typeof(SimulationSystemGroup))]
     [UpdateAfter(typeof(TimelineComponentAnimationGroup))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation |
@@ -76,7 +77,8 @@ namespace BovineLabs.Timeline.Grid.Influence
                     LocalToWorldLookup = SystemAPI.GetComponentLookup<LocalToWorld>(true)
                 }.ScheduleParallel(_activeQuery, state.Dependency);
 
-                handle = field.Schedule(stamps.AsDeferredJobArray(), gather);
+                gather.Complete();
+                handle = field.Schedule(stamps.AsArray(), default);
             }
 
             fieldRw.ValueRW.Field = field;

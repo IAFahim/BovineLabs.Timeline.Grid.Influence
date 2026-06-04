@@ -52,8 +52,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Threat
                 }, Allocator.Persistent);
                 var e = state.EntityManager.CreateEntity();
                 state.EntityManager.AddComponentData(e, new ThreatField { Id = id });
-                
-                // Guard first frame
+
                 return;
             }
 
@@ -71,7 +70,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Threat
                 }
                 else
                 {
-                    pair.PendingStamps.Capacity = math.max(pair.PendingStamps.Capacity, pair.PendingStamps.Length + count);
+                    pair.WriterDependency = new ResizeStampListJob
+                    {
+                        List = pair.PendingStamps,
+                        MinCapacity = pair.PendingStamps.Length + count
+                    }.Schedule(pair.WriterDependency);
                 }
 
                 JobHandle gather = new GatherThreatStampsJob

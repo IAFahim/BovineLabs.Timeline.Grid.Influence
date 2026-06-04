@@ -7,32 +7,40 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 {
     public unsafe struct NativeFlatMap : INativeDisposable
     {
-        [NativeDisableUnsafePtrRestriction] int2* _keys;
-        [NativeDisableUnsafePtrRestriction] int* _vals;
-        [NativeDisableUnsafePtrRestriction] byte* _used;
-        int _mask;       // capacity - 1, capacity is power of two
-        int _count;
-        Allocator _allocator;
+        internal struct State
+        {
+            public int2* keys;
+            public int* vals;
+            public byte* used;
+            public int mask;
+            public int count;
+        }
 
-        public bool IsCreated => _keys != null;
-        public int Count => _count;
+        [NativeDisableUnsafePtrRestriction] internal State* _state;
+        internal Allocator _allocator;
+
+        public bool IsCreated => _state != null && _state->keys != null;
+        public int Count => _state != null ? _state->count : 0;
 
         public static NativeFlatMap Create(int minCapacity, Allocator allocator)
         {
             int cap = 1;
             while (cap < minCapacity) cap <<= 1;
             if (cap < 8) cap = 8;
-            var m = new NativeFlatMap { _allocator = allocator, _mask = cap - 1, _count = 0 };
+            var m = new NativeFlatMap { _allocator = allocator };
+            m._state = (State*)UnsafeUtility.Malloc(sizeof(State), UnsafeUtility.AlignOf<State>(), allocator);
+            m._state->count = 0;
+            m._state->mask = cap - 1;
             m.Alloc(cap);
             return m;
         }
 
         void Alloc(int cap)
         {
-            _keys = (int2*)UnsafeUtility.Malloc((long)cap * sizeof(int2), UnsafeUtility.AlignOf<int2>(), _allocator);
-            _vals = (int*)UnsafeUtility.Malloc((long)cap * sizeof(int), UnsafeUtility.AlignOf<int>(), _allocator);
-            _used = (byte*)UnsafeUtility.Malloc(cap, 1, _allocator);
-            UnsafeUtility.MemClear(_used, cap);
+            _state->keys = (int2*)UnsafeUtility.Malloc((long)cap * sizeof(int2), UnsafeUtility.AlignOf<int2>(), _allocator);
+            _state->vals = (int*)UnsafeUtility.Malloc((long)cap * sizeof(int), UnsafeUtility.AlignOf<int>(), _allocator);
+            _state->used = (byte*)UnsafeUtility.Malloc(cap, 1, _allocator);
+            UnsafeUtility.MemClear(_state->used, cap);
         }
 
         static int Hash(int2 c)
@@ -44,11 +52,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         public bool TryGetValue(int2 key, out int value)
         {
-            int i = Hash(key) & _mask;
-            while (_used[i] != 0)
+            int i = Hash(key) & _state->mask;
+            while (_state->used[i] != 0)
             {
-                if (_keys[i].x == key.x && _keys[i].y == key.y) { value = _vals[i]; return true; }
-                i = (i + 1) & _mask;
+                if (_state->keys[i].x == key.x && _state->keys[i].y == key.y) { value = _state->vals[i]; return true; }
+                i = (i + 1) & _state->mask;
             }
             value = 0;
             return false;
@@ -56,49 +64,48 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         public void Add(int2 key, int value)
         {
-            if ((_count + 1) * 4 >= (_mask + 1) * 3) Grow();
-            int i = Hash(key) & _mask;
-            while (_used[i] != 0)
+            if ((_state->count + 1) * 4 >= (_state->mask + 1) * 3) Grow();
+            int i = Hash(key) & _state->mask;
+            while (_state->used[i] != 0)
             {
-                if (_keys[i].x == key.x && _keys[i].y == key.y) { _vals[i] = value; return; }
-                i = (i + 1) & _mask;
+                if (_state->keys[i].x == key.x && _state->keys[i].y == key.y) { _state->vals[i] = value; return; }
+                i = (i + 1) & _state->mask;
             }
-            _used[i] = 1; _keys[i] = key; _vals[i] = value; _count++;
+            _state->used[i] = 1; _state->keys[i] = key; _state->vals[i] = value; _state->count++;
         }
 
         // Backward-shift deletion: keeps probe sequences contiguous, no tombstones.
         public bool Remove(int2 key)
         {
-            int i = Hash(key) & _mask;
-            while (_used[i] != 0)
+            int i = Hash(key) & _state->mask;
+            while (_state->used[i] != 0)
             {
-                if (_keys[i].x == key.x && _keys[i].y == key.y) break;
-                i = (i + 1) & _mask;
-                if (_used[i] == 0) return false;
+                if (_state->keys[i].x == key.x && _state->keys[i].y == key.y) break;
+                i = (i + 1) & _state->mask;
+                if (_state->used[i] == 0) return false;
             }
-            if (_used[i] == 0) return false;
+            if (_state->used[i] == 0) return false;
 
             int j = i;
             while (true)
             {
-                _used[i] = 0;
+                _state->used[i] = 0;
                 int k;
                 do
                 {
-                    j = (j + 1) & _mask;
-                    if (_used[j] == 0) { _count--; return true; }
-                    k = Hash(_keys[j]) & _mask;
-                    // is k cyclically in (i, j]? if not, this entry may move into slot i
+                    j = (j + 1) & _state->mask;
+                    if (_state->used[j] == 0) { _state->count--; return true; }
+                    k = Hash(_state->keys[j]) & _state->mask;
                 } while ((i <= j) ? (i < k && k <= j) : (i < k || k <= j));
-                _keys[i] = _keys[j]; _vals[i] = _vals[j]; _used[i] = 1;
+                _state->keys[i] = _state->keys[j]; _state->vals[i] = _state->vals[j]; _state->used[i] = 1;
                 i = j;
             }
         }
 
         void Grow()
         {
-            int2* ok = _keys; int* ov = _vals; byte* ou = _used; int oldCap = _mask + 1;
-            _mask = (oldCap << 1) - 1; _count = 0;
+            int2* ok = _state->keys; int* ov = _state->vals; byte* ou = _state->used; int oldCap = _state->mask + 1;
+            _state->mask = (oldCap << 1) - 1; _state->count = 0;
             Alloc(oldCap << 1);
             for (int t = 0; t < oldCap; t++) if (ou[t] != 0) Add(ok[t], ov[t]);
             UnsafeUtility.Free(ok, _allocator);
@@ -106,13 +113,18 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             UnsafeUtility.Free(ou, _allocator);
         }
 
-        public ReadOnly AsReadOnly() => new ReadOnly(_keys, _vals, _used, _mask);
+        public ReadOnly AsReadOnly() => new ReadOnly(_state->keys, _state->vals, _state->used, _state->mask);
 
         public void Dispose()
         {
-            if (_keys != null) UnsafeUtility.Free(_keys, _allocator);
-            if (_vals != null) UnsafeUtility.Free(_vals, _allocator);
-            if (_used != null) UnsafeUtility.Free(_used, _allocator);
+            if (_state != null)
+            {
+                if (_state->keys != null) UnsafeUtility.Free(_state->keys, _allocator);
+                if (_state->vals != null) UnsafeUtility.Free(_state->vals, _allocator);
+                if (_state->used != null) UnsafeUtility.Free(_state->used, _allocator);
+                UnsafeUtility.Free(_state, _allocator);
+                _state = null;
+            }
             this = default;
         }
 

@@ -49,20 +49,32 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
         {
             ref var reg = ref SystemAPI.GetSingletonRW<FieldRegistrySingleton>().ValueRW.Registry;
 
-            JobHandle combined = state.Dependency;
+            JobHandle combinedWriters = state.Dependency;
+            for (int i = 0; i < reg.Count; i++)
+            {
+                combinedWriters = JobHandle.CombineDependencies(combinedWriters, reg.Slot(i).WriterDependency);
+            }
+            combinedWriters.Complete();
+
+            JobHandle combined = default;
             for (int i = 0; i < reg.Count; i++)
             {
                 ref var pair = ref reg.Slot(i);
 
-                var target = pair.DoubleBuffered ? pair.Back : pair.Front;
-                var h = target.Schedule(
-                    pair.PendingStamps.IsCreated ? pair.PendingStamps.AsDeferredJobArray() : default, 
-                    pair.WriterDependency);
+                var stamps = pair.PendingStamps.IsCreated ? pair.PendingStamps.AsArray() : default;
+                JobHandle h;
+                
+                if (pair.DoubleBuffered)
+                {
+                    h = pair.Back.Schedule(stamps, default);
+                }
+                else
+                {
+                    h = pair.Front.Schedule(stamps, default);
+                }
                 
                 pair.Swap();
 
-                // Clear for next frame. The stamps were allocated via WorldUpdateAllocator or TempJob if persistent.
-                // Assuming features use WorldUpdateAllocator, we just drop the reference.
                 pair.PendingStamps = default;
                 pair.WriterDependency = default;
 

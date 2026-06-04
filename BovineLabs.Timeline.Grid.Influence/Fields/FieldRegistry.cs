@@ -84,7 +84,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
     {
         public static ref InfluenceFieldPair Slot(this ref FieldRegistry r, int i)
         {
-            // Pointer arithmetic to return ref from NativeArray
             unsafe
             {
                 var ptr = (InfluenceFieldPair*)NativeArrayUnsafeUtility.GetUnsafePtr(r.Pairs);

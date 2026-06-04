@@ -44,7 +44,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
                     ChunkPower = config.ChunkPower,
                     RetentionFrames = config.RetentionFrames,
                     DoubleBuffered = config.DoubleBuffered,
-                    HasFeedback = config.DoubleBuffered,
                     DecayPerMille = config.DecayPerMille,
                     SpreadDenominator = config.SpreadDenominator,
                     StrideAlignment = config.StrideAlignment
@@ -116,6 +115,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
                 combined = JobHandle.CombineDependencies(combined, h);
             }
 
+            combined.Complete();
             state.Dependency = combined;
             stampsMap.Clear();
         }

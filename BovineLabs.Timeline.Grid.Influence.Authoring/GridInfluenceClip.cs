@@ -29,7 +29,18 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
         public override void Bake(Entity clipEntity, BakingContext context)
         {
-            if (Field == null || Stamp == null) return;
+            if (Field == null)
+            {
+                Debug.LogError($"GridInfluenceClip '{name}' has no Field schema assigned. Clip will be skipped.", this);
+                return;
+            }
+
+            if (Stamp == null)
+            {
+                Debug.LogError($"GridInfluenceClip '{name}' has no Stamp schema assigned. Clip will be skipped.", this);
+                return;
+            }
+
             context.Baker.DependsOn(Field);
             context.Baker.DependsOn(Stamp);
 

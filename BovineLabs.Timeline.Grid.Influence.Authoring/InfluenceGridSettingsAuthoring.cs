@@ -15,6 +15,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public int StrideAlignment = 4;
 
         public GridFieldSchemaObject[] Fields = System.Array.Empty<GridFieldSchemaObject>();
+        public GridStampSchemaObject[] Stamps = System.Array.Empty<GridStampSchemaObject>();
 
         public override void Bake(Baker<SettingsAuthoring> baker)
         {

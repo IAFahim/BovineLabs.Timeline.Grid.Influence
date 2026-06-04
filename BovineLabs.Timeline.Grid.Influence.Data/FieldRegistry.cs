@@ -102,7 +102,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             unsafe
             {
-                var ptr = (InfluenceFieldPair*)NativeArrayUnsafeUtility.GetUnsafePtr(r.Pairs);
+                var ptr = (InfluenceFieldPair*)r.Pairs.GetUnsafePtr();
                 return ref ptr[i];
             }
         }

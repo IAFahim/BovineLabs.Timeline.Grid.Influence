@@ -6,15 +6,8 @@ using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data
 {
-    [BurstCompile]
-    public unsafe struct PrepareSlotsAndOffsetsJob : IJob
+    public unsafe struct PrepareSlotsHelper
     {
-        [ReadOnly] public NativeParallelMultiHashMap<int, Stamp>.ReadOnly StampsMap;
-        public int SlotIndex;
-        public NativeList<Stamp> ExtractedStamps;
-
-        [ReadOnly] public NativeArray<Stamp> Stamps;
-
         public NativeList<int> Offsets;
         public NativeList<WeightedRect> Spans;
         public NativeList<int> StampCount;
@@ -36,8 +29,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         [ReadOnly] public NativeArray<int> StencilData;
         public int DecayPerMille;
         public int SpreadDenominator;
-
-        bool UseMultiMap => ExtractedStamps.IsCreated;
 
         public void Execute()
         {
@@ -77,12 +68,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     if (freeSlot >= highestSlot) continue;
 
                     int elements = Spec.ElementsPerChunk;
-                    unsafe
-                    {
-                        void* dst = (int*)Data.GetUnsafePtr() + freeSlot * elements;
-                        void* src = (int*)Data.GetUnsafePtr() + highestSlot * elements;
-                        UnsafeUtility.MemCpy(dst, src, elements * sizeof(int));
-                    }
+                    void* dst = (int*)Data.GetUnsafePtr() + freeSlot * elements;
+                    void* src = (int*)Data.GetUnsafePtr() + highestSlot * elements;
+                    UnsafeUtility.MemCpy(dst, src, elements * sizeof(int));
 
                     int2 coord = CoordBySlot[highestSlot];
                     CoordBySlot[freeSlot] = coord;
@@ -117,31 +105,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             {
                 ActivateStencilFrontier();
             }
+        }
 
-            NativeArray<Stamp> resolved;
-            if (UseMultiMap)
-            {
-                ExtractedStamps.Clear();
-                if (StampsMap.TryGetFirstValue(SlotIndex, out var stamp, out var it))
-                {
-                    ExtractedStamps.Add(stamp);
-                    while (StampsMap.TryGetNextValue(out stamp, ref it))
-                    {
-                        ExtractedStamps.Add(stamp);
-                    }
-                }
-                resolved = ExtractedStamps.AsArray();
-            }
-            else
-            {
-                if (!Stamps.IsCreated)
-                {
-                    StampCount.Length = 0;
-                    return;
-                }
-                resolved = Stamps;
-            }
-
+        public void ProcessStamps(NativeArray<Stamp> resolved)
+        {
             StampCount.Length = resolved.Length;
             if (resolved.Length == 0) return;
 
@@ -206,14 +173,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         void ActivateBounds(in CellRect bounds)
         {
             if (bounds.IsEmpty) return;
-            int cx0 = bounds.Min.x >> Spec.Log2;
-            int cy0 = bounds.Min.y >> Spec.Log2;
-            int cx1 = (bounds.Max.x - 1) >> Spec.Log2;
-            int cy1 = (bounds.Max.y - 1) >> Spec.Log2;
+            ChunkRange chunks = ChunkMath.ChunkRangeOf(bounds, Spec.Log2);
 
-            for (int cy = cy0; cy <= cy1; cy++)
+            for (int cy = chunks.Min.y; cy <= chunks.Max.y; cy++)
             {
-                for (int cx = cx0; cx <= cx1; cx++)
+                for (int cx = chunks.Min.x; cx <= chunks.Max.x; cx++)
                 {
                     Activate(new int2(cx, cy));
                 }
@@ -251,6 +215,53 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
             SlotByCoord.Add(coord, slot);
             return slot;
+        }
+    }
+
+    [BurstCompile]
+    public struct PrepareSlotsFromMapJob : IJob
+    {
+        [ReadOnly] public NativeParallelMultiHashMap<int, Stamp>.ReadOnly StampsMap;
+        public int SlotIndex;
+        public NativeList<Stamp> ExtractedStamps;
+
+        public PrepareSlotsHelper Helper;
+
+        public void Execute()
+        {
+            Helper.Execute();
+
+            ExtractedStamps.Clear();
+            if (StampsMap.TryGetFirstValue(SlotIndex, out var stamp, out var it))
+            {
+                ExtractedStamps.Add(stamp);
+                while (StampsMap.TryGetNextValue(out stamp, ref it))
+                {
+                    ExtractedStamps.Add(stamp);
+                }
+            }
+
+            Helper.ProcessStamps(ExtractedStamps.AsArray());
+        }
+    }
+
+    [BurstCompile]
+    public struct PrepareSlotsFromArrayJob : IJob
+    {
+        [ReadOnly] public NativeArray<Stamp> Stamps;
+        public PrepareSlotsHelper Helper;
+
+        public void Execute()
+        {
+            Helper.Execute();
+
+            if (!Stamps.IsCreated)
+            {
+                Helper.StampCount.Length = 0;
+                return;
+            }
+
+            Helper.ProcessStamps(Stamps);
         }
     }
 }

@@ -1,12 +1,27 @@
+using BovineLabs.Core.ObjectManagement;
+using BovineLabs.Core.PropertyDrawers;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Mathematics;
 using UnityEngine;
 
 namespace BovineLabs.Timeline.Grid.Influence.Authoring
 {
+    [AutoRef(nameof(InfluenceGridSettingsAuthoring), nameof(InfluenceGridSettingsAuthoring.Stamps), "GridStamp", "Schemas/GridStamps")]
     [CreateAssetMenu(menuName = "BovineLabs/Grid/Stamp Schema")]
-    public class GridStampSchemaObject : ScriptableObject
+    public class GridStampSchemaObject : ScriptableObject, IUID
     {
+        [SerializeField]
+        [InspectorReadOnly]
+        private int id;
+
+        public ushort Id => (ushort)this.id;
+
+        int IUID.ID
+        {
+            get => this.id;
+            set => this.id = value;
+        }
+
         public ShapeKind Kind = ShapeKind.Disc;
         public int BaseWeight = 1;
 

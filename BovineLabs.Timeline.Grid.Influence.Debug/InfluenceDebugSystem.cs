@@ -1,12 +1,12 @@
 #if UNITY_EDITOR || BL_DEBUG
 using BovineLabs.Core.ConfigVars;
 using BovineLabs.Core;
-using BovineLabs.Quill;
-using BovineLabs.Timeline.Core.Debug;
-using BovineLabs.Timeline.Data;
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
+using BovineLabs.Quill;
 using BovineLabs.Reaction.Data.Core;
+using BovineLabs.Timeline.Core.Debug;
+using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.EntityLinks;
 using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.Grid.Influence.Data;
@@ -106,31 +106,37 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             bool drawValues = InfluenceDebugSystemConfig.DrawValues.Data;
 
             if ((drawGrid || drawValues) &&
-                SystemAPI.TryGetSingletonRW<InfluenceFieldSingleton>(out var fieldRw) &&
-                fieldRw.ValueRO.Field.IsCreated)
+                SystemAPI.TryGetSingletonRW<FieldRegistrySingleton>(out var regRw))
             {
-                var field = fieldRw.ValueRO.Field;
-                var dependency = JobHandle.CombineDependencies(state.Dependency, field.Dependency);
-
-                dependency = new DrawGridJob
+                ref var reg = ref regRw.ValueRW.Registry;
+                for (int i = 0; i < reg.Count; i++)
                 {
-                    Drawer = drawer,
-                    PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
-                    NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
-                    GridColor = InfluenceDebugSystemConfig.GridColor.Data,
-                    CellSize = settings.CellSize,
-                    Basis = basis,
-                    DrawGrid = drawGrid,
-                    DrawValues = drawValues,
-                    ActiveSlots = field.ActiveSlotsList,
-                    CoordBySlot = field.CoordBySlotList,
-                    Data = field.DataList,
-                    Spec = field.Spec
-                }.Schedule(dependency);
+                    ref var pair = ref reg.Slot(i);
+                    var field = pair.Front;
+                    if (!field.IsCreated) continue;
 
-                field.PublishDependency(dependency);
-                fieldRw.ValueRW.Field = field;
-                state.Dependency = dependency;
+                    var dependency = JobHandle.CombineDependencies(state.Dependency, field.Dependency);
+
+                    dependency = new DrawGridJob
+                    {
+                        Drawer = drawer,
+                        PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
+                        NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
+                        GridColor = InfluenceDebugSystemConfig.GridColor.Data,
+                        CellSize = settings.CellSize,
+                        Basis = basis,
+                        DrawGrid = drawGrid,
+                        DrawValues = drawValues,
+                        ActiveSlots = field.ActiveSlotsList,
+                        CoordBySlot = field.CoordBySlotList,
+                        Data = field.DataList,
+                        Spec = field.Spec
+                    }.Schedule(dependency);
+
+                    field.PublishDependency(dependency);
+                    pair.Front = field;
+                    state.Dependency = dependency;
+                }
             }
         }
 

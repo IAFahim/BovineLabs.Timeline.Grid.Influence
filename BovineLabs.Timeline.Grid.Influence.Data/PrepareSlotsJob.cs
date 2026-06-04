@@ -9,11 +9,16 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
     [BurstCompile]
     public unsafe struct PrepareSlotsAndOffsetsJob : IJob
     {
+        [ReadOnly] public NativeParallelMultiHashMap<int, Stamp>.ReadOnly StampsMap;
+        public int SlotIndex;
+        public NativeList<Stamp> ExtractedStamps;
+
         [ReadOnly] public NativeArray<Stamp> Stamps;
+
         public NativeList<int> Offsets;
         public NativeList<WeightedRect> Spans;
         public NativeList<int> StampCount;
-        
+
         public NativeFlatMap SlotByCoord;
         public NativeList<int> FreeSlots;
         public NativeList<int2> CoordBySlot;
@@ -31,6 +36,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         [ReadOnly] public NativeArray<int> StencilData;
         public int DecayPerMille;
         public int SpreadDenominator;
+
+        bool UseMultiMap => ExtractedStamps.IsCreated;
 
         public void Execute()
         {
@@ -65,10 +72,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     {
                         highestSlot--;
                     }
-                    
+
                     int freeSlot = FreeSlots[i];
                     if (freeSlot >= highestSlot) continue;
-                    
+
                     int elements = Spec.ElementsPerChunk;
                     unsafe
                     {
@@ -76,16 +83,16 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                         void* src = (int*)Data.GetUnsafePtr() + highestSlot * elements;
                         UnsafeUtility.MemCpy(dst, src, elements * sizeof(int));
                     }
-                    
+
                     int2 coord = CoordBySlot[highestSlot];
                     CoordBySlot[freeSlot] = coord;
                     LastWrittenBySlot[freeSlot] = LastWrittenBySlot[highestSlot];
                     SlotByCoord.Add(coord, freeSlot);
-                    
+
                     LastWrittenBySlot[highestSlot] = 0;
                     highestSlot--;
                 }
-                
+
                 int newCount = highestSlot + 1;
                 if (newCount < CoordBySlot.Length)
                 {
@@ -93,7 +100,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     LastWrittenBySlot.Length = newCount;
                     Data.Length = newCount * Spec.ElementsPerChunk;
                 }
-                
+
                 FreeSlots.Clear();
                 for (int slot = 0; slot < newCount; slot++)
                 {
@@ -111,24 +118,45 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 ActivateStencilFrontier();
             }
 
-            if (!Stamps.IsCreated)
+            NativeArray<Stamp> resolved;
+            if (UseMultiMap)
             {
-                StampCount.Length = 0;
-                return;
+                ExtractedStamps.Clear();
+                if (StampsMap.TryGetFirstValue(SlotIndex, out var stamp, out var it))
+                {
+                    ExtractedStamps.Add(stamp);
+                    while (StampsMap.TryGetNextValue(out stamp, ref it))
+                    {
+                        ExtractedStamps.Add(stamp);
+                    }
+                }
+                resolved = ExtractedStamps.AsArray();
             }
-            StampCount.Length = Stamps.Length;
-            long running = 0;
-            Offsets.Length = Stamps.Length + 1;
-            for (int i = 0; i < Stamps.Length; i++)
+            else
             {
-                Offsets[i] = IntegerMath.ClampToInt(running);
-                InfluenceShape shape = Stamps[i].Shape;
-                running += Rasterizer.EstimateSpanCount(shape);
-                ActivateBounds(Rasterizer.Bounds(shape, Stamps[i].Origin));
+                if (!Stamps.IsCreated)
+                {
+                    StampCount.Length = 0;
+                    return;
+                }
+                resolved = Stamps;
             }
 
-            Offsets[Stamps.Length] = IntegerMath.ClampToInt(running);
-            Spans.Length = Offsets[Stamps.Length];
+            StampCount.Length = resolved.Length;
+            if (resolved.Length == 0) return;
+
+            long running = 0;
+            Offsets.Length = resolved.Length + 1;
+            for (int i = 0; i < resolved.Length; i++)
+            {
+                Offsets[i] = IntegerMath.ClampToInt(running);
+                InfluenceShape shape = resolved[i].Shape;
+                running += Rasterizer.EstimateSpanCount(shape);
+                ActivateBounds(Rasterizer.Bounds(shape, resolved[i].Origin));
+            }
+
+            Offsets[resolved.Length] = IntegerMath.ClampToInt(running);
+            Spans.Length = Offsets[resolved.Length];
         }
 
         void ActivateStencilFrontier()
@@ -144,16 +172,16 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 Activate(coord);
 
                 int baseIndex = slot * elements;
-                
+
                 if (NeedsActivationEdge(baseIndex, 0, 0, 0, 1, chunkSize, stride))
                     Activate(coord + new int2(-1, 0));
-                
+
                 if (NeedsActivationEdge(baseIndex, chunkSize - 1, 0, 0, 1, chunkSize, stride))
                     Activate(coord + new int2(1, 0));
-                
+
                 if (NeedsActivationEdge(baseIndex, 0, 0, 1, 0, chunkSize, stride))
                     Activate(coord + new int2(0, -1));
-                
+
                 if (NeedsActivationEdge(baseIndex, 0, chunkSize - 1, 1, 0, chunkSize, stride))
                     Activate(coord + new int2(0, 1));
             }

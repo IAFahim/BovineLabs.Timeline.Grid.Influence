@@ -14,7 +14,9 @@
     "BovineLabs.Reaction.Data",
     "BovineLabs.Timeline.EntityLinks",
     "BovineLabs.Timeline.EntityLinks.Data",
-    "BovineLabs.Core"
+    "BovineLabs.Core",
+    "BovineLabs.Core.Extensions",
+    "BovineLabs.Core.Iterators"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

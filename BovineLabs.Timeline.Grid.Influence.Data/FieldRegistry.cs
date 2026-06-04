@@ -1,12 +1,10 @@
 using System;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
-using Unity.Mathematics;
-using Unity.Collections.LowLevel.Unsafe;
-using BovineLabs.Timeline.Grid.Influence.Data;
 
-namespace BovineLabs.Timeline.Grid.Influence.Fields
+namespace BovineLabs.Timeline.Grid.Influence.Data
 {
     public readonly struct FieldId
     {
@@ -18,34 +16,49 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
 
     public struct FieldConfig
     {
+        public ushort Key;
         public FixedString64Bytes Name;
         public int ChunkPower;
         public uint RetentionFrames;
         public bool HasFeedback;
+        public int DecayPerMille;
+        public int SpreadDenominator;
         public int StrideAlignment;
 
-        public bool NeedsDoubleBuffer => HasFeedback;
+        public bool NeedsDoubleBuffer => HasFeedback || DoubleBuffered;
+        public bool DoubleBuffered;
     }
 
-    public struct FieldRegistry : IComponentData, IDisposable
+    public struct FieldRegistry : IDisposable
     {
         public NativeArray<InfluenceFieldPair> Pairs;
+        public NativeHashMap<ushort, int> KeyToSlot;
         public int Count;
 
+        public void Initialize(int capacity, Allocator allocator)
+        {
+            Pairs = new NativeArray<InfluenceFieldPair>(capacity, allocator);
+            KeyToSlot = new NativeHashMap<ushort, int>(capacity, allocator);
+            Count = 0;
+        }
 
         public FieldId Register(in FieldConfig config, Allocator allocator)
         {
-            if (!Pairs.IsCreated) return FieldId.Invalid;
-            if (Count >= Pairs.Length) return FieldId.Invalid;
+            if (!Pairs.IsCreated || Count >= Pairs.Length) return FieldId.Invalid;
+
             int i = Count++;
             ref var pair = ref this.Slot(i);
+
             int align = config.StrideAlignment == 0 ? 8 : config.StrideAlignment;
             var spec = GridSpec.FromPowerOfTwo(config.ChunkPower, config.RetentionFrames, align);
+
             pair.Config = config;
             pair.Front = InfluenceField.Create(spec, allocator);
             pair.DoubleBuffered = config.NeedsDoubleBuffer;
             if (pair.DoubleBuffered)
                 pair.Back = InfluenceField.Create(spec, allocator);
+
+            KeyToSlot.Add(config.Key, i);
             return new FieldId(i);
         }
 
@@ -61,6 +74,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
                 if (p.DoubleBuffered && p.Back.IsCreated) p.Back.Dispose();
             }
             if (Pairs.IsCreated) Pairs.Dispose();
+            if (KeyToSlot.IsCreated) KeyToSlot.Dispose();
             Count = 0;
         }
     }
@@ -72,7 +86,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
         public InfluenceField Back;
         public bool DoubleBuffered;
 
-        public NativeList<Stamp> PendingStamps;
         public InfluenceField.StencilConfig PendingStencil;
         public JobHandle WriterDependency;
 

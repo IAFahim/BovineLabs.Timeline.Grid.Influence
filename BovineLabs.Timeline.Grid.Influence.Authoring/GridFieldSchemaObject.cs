@@ -16,8 +16,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         [Range(1, 8)] public int ChunkPower = 4;
         public uint RetentionFrames = 300;
         public bool DoubleBuffered = false;
-        
-        [Header("Diffusion settings")]
+
+        [Header("Diffusion")]
         [Range(0, 1000)] public int DecayPerMille = 0;
         [Min(1)] public int SpreadDenominator = 5;
     }

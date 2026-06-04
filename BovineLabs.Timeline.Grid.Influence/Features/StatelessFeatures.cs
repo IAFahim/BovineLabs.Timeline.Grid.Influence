@@ -1,7 +1,6 @@
 using Unity.Entities;
 using Unity.Mathematics;
 using BovineLabs.Timeline.Grid.Influence.Data;
-using BovineLabs.Timeline.Grid.Influence.Fields;
 
 namespace BovineLabs.Timeline.Grid.Influence.Features
 {
@@ -9,11 +8,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Features
     public static class TerritoryReader
     {
         public static int Controller(ref FieldRegistry r, FieldId id, int2 cell)
-        { 
-            int v = r.Front(id).AsReader().ReadCell(cell); 
-            return v == 0 ? 0 : (v > 0 ? 1 : -1); 
+        {
+            int v = r.Front(id).AsReader().ReadCell(cell);
+            return v == 0 ? 0 : (v > 0 ? 1 : -1);
         }
-        
+
         public static bool IsFrontline(ref FieldRegistry r, FieldId id, int2 cell, int band)
             => math.abs(r.Front(id).AsReader().ReadCell(cell)) <= band;
     }
@@ -23,7 +22,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Features
     {
         public static bool IsSeen(ref FieldRegistry r, FieldId id, int2 cell)
             => r.Front(id).AsReader().ReadCell(cell) > 0;
-            
+
         public static bool InShadow(ref FieldRegistry r, FieldId id, int2 cell)
             => r.Front(id).AsReader().ReadCell(cell) == 0;
     }
@@ -36,7 +35,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Features
         {
             var reader = r.Front(presenceId).AsReader();
             int total = 0;
-            for (int y = 0; y < size.y; y++) 
+            for (int y = 0; y < size.y; y++)
             for (int x = 0; x < size.x; x++)
                 total += reader.ReadCell(new int2(min.x + x, min.y + y));
             return total;
@@ -59,7 +58,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Features
         public static bool IsValid(ref FieldRegistry r, FieldId threatId, int2 min, int2 size, int maxThreatTolerance)
         {
             var rd = r.Front(threatId).AsReader();
-            for (int y = 0; y < size.y; y++) 
+            for (int y = 0; y < size.y; y++)
             for (int x = 0; x < size.x; x++)
             {
                 if (rd.ReadCell(new int2(min.x + x, min.y + y)) > maxThreatTolerance)

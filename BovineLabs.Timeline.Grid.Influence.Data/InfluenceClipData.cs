@@ -6,6 +6,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 {
     public struct InfluenceClipData : IComponentData
     {
+        public ushort FieldKey;
         public InfluenceShape Shape;
         public float3 LocalOffset;
 

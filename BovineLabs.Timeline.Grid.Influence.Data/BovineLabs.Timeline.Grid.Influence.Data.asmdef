@@ -5,6 +5,7 @@
     "Unity.Burst",
     "Unity.Collections",
     "Unity.Entities",
+    "Unity.Jobs",
     "Unity.Mathematics",
     "BovineLabs.Reaction.Data"
   ],

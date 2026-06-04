@@ -5,24 +5,14 @@ using BovineLabs.Timeline.Grid.Influence.Data;
 
 namespace BovineLabs.Timeline.Grid.Influence.Fields
 {
-    public struct FieldRegistrySingleton : IComponentData
-    {
-        public FieldRegistry Registry;
-    }
-
     [UpdateInGroup(typeof(InitializationSystemGroup))]
     public partial struct FieldBootstrapSystem : ISystem
     {
+        private bool _bootstrapped;
+
         public void OnCreate(ref SystemState state)
         {
-            if (!SystemAPI.HasSingleton<FieldRegistrySingleton>())
-            {
-                var e = state.EntityManager.CreateEntity();
-                state.EntityManager.AddComponentData(e, new FieldRegistrySingleton
-                {
-                    Registry = new FieldRegistry { Pairs = new NativeArray<InfluenceFieldPair>(16, Allocator.Persistent) }
-                });
-            }
+            state.RequireForUpdate<InfluenceGridSettings>();
         }
 
         public void OnDestroy(ref SystemState state)
@@ -31,10 +21,45 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
             if (SystemAPI.TryGetSingletonRW<FieldRegistrySingleton>(out var rw))
             {
                 rw.ValueRW.Registry.Dispose();
+                if (rw.ValueRO.PendingStamps.IsCreated)
+                    rw.ValueRW.PendingStamps.Dispose();
             }
         }
 
-        public void OnUpdate(ref SystemState state) { }
+        public void OnUpdate(ref SystemState state)
+        {
+            if (_bootstrapped) return;
+
+            if (!SystemAPI.TryGetSingletonBuffer<GridFieldConfigData>(out var configs)) return;
+
+            var registry = new FieldRegistry();
+            registry.Initialize(configs.Length, Allocator.Persistent);
+
+            foreach (var config in configs)
+            {
+                registry.Register(new FieldConfig
+                {
+                    Key = config.Key,
+                    Name = config.Name,
+                    ChunkPower = config.ChunkPower,
+                    RetentionFrames = config.RetentionFrames,
+                    DoubleBuffered = config.DoubleBuffered,
+                    HasFeedback = config.DoubleBuffered,
+                    DecayPerMille = config.DecayPerMille,
+                    SpreadDenominator = config.SpreadDenominator,
+                    StrideAlignment = config.StrideAlignment
+                }, Allocator.Persistent);
+            }
+
+            var e = state.EntityManager.CreateEntity();
+            state.EntityManager.AddComponentData(e, new FieldRegistrySingleton
+            {
+                Registry = registry,
+                PendingStamps = new NativeParallelMultiHashMap<int, Stamp>(256, Allocator.Persistent)
+            });
+
+            _bootstrapped = true;
+        }
     }
 
     [UpdateInGroup(typeof(SimulationSystemGroup), OrderLast = true)]
@@ -47,7 +72,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
 
         public void OnUpdate(ref SystemState state)
         {
-            ref var reg = ref SystemAPI.GetSingletonRW<FieldRegistrySingleton>().ValueRW.Registry;
+            ref var singleton = ref SystemAPI.GetSingletonRW<FieldRegistrySingleton>().ValueRW;
+            ref var reg = ref singleton.Registry;
+            var stampsMap = singleton.PendingStamps;
 
             JobHandle combinedWriters = state.Dependency;
             for (int i = 0; i < reg.Count; i++)
@@ -61,27 +88,36 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
             {
                 ref var pair = ref reg.Slot(i);
 
-                var stamps = pair.PendingStamps.IsCreated ? pair.PendingStamps.AsArray() : default;
+                if (pair.DoubleBuffered && pair.Config.DecayPerMille > 0)
+                {
+                    pair.PendingStencil = new InfluenceField.StencilConfig
+                    {
+                        IsActive = true,
+                        ActiveSlots = pair.Front.ActiveSlotsDeferred,
+                        CoordBySlot = pair.Front.CoordBySlotDeferred,
+                        Data = pair.Front.DataDeferred,
+                        SlotByCoord = pair.Front.SlotByCoordReadOnly,
+                        DecayPerMille = pair.Config.DecayPerMille,
+                        SpreadDenominator = pair.Config.SpreadDenominator
+                    };
+                }
+
                 JobHandle h;
-                
                 if (pair.DoubleBuffered)
-                {
-                    h = pair.Back.Schedule(stamps, default, pair.PendingStencil);
-                }
+                    h = pair.Back.Schedule(stampsMap.AsReadOnly(), i, default, pair.PendingStencil);
                 else
-                {
-                    h = pair.Front.Schedule(stamps, default, pair.PendingStencil);
-                }
-                
+                    h = pair.Front.Schedule(stampsMap.AsReadOnly(), i, default, pair.PendingStencil);
+
                 pair.Swap();
 
-                pair.PendingStamps = default;
                 pair.PendingStencil = default;
                 pair.WriterDependency = default;
 
                 combined = JobHandle.CombineDependencies(combined, h);
             }
+
             state.Dependency = combined;
+            stampsMap.Clear();
         }
     }
 }

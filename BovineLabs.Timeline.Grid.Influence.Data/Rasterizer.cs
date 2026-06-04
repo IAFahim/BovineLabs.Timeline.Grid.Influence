@@ -174,8 +174,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                         return 0;
                     }
 
-                    int inner = shape.AnnulusInnerRadius >= 0 ? DiscRowCount(shape.AnnulusInnerRadius) : 0;
-                    return IntegerMath.SaturatingAdd(DiscRowCount(shape.AnnulusOuterRadius), inner);
+                    int inner = shape.AnnulusInnerRadius >= 0 ? 2 * shape.AnnulusInnerRadius + 1 : 0;
+                    return IntegerMath.SaturatingAdd(2 * shape.AnnulusOuterRadius + 1, inner);
                 }
 
                 case ShapeKind.Capsule:
@@ -301,16 +301,22 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         static void EmitDisc(ref SpanSink sink, int2 center, int radius, int weight)
         {
-            if (radius < 0)
+            if (radius < 0) return;
+            long r2 = (long)radius * radius;
+            int half = 0;
+            for (int dy = -radius; dy <= 0; dy++)
             {
-                return;
+                long rem = r2 - (long)dy * dy;
+                while ((long)(half + 1) * (half + 1) <= rem) half++;
+                int y = center.y + dy;
+                sink.Push(new WeightedRect(
+                    new CellRect(new int2(center.x - half, y), new int2(center.x + half + 1, y + 1)),
+                    weight));
             }
-
-            long radiusSquared = (long)radius * radius;
-
-            for (int dy = -radius; dy <= radius; dy++)
+            for (int dy = 1; dy <= radius; dy++)
             {
-                int half = IntegerMath.FloorSqrt(radiusSquared - (long)dy * dy);
+                long rem = r2 - (long)dy * dy;
+                while ((long)half * half > rem) half--;
                 int y = center.y + dy;
                 sink.Push(new WeightedRect(
                     new CellRect(new int2(center.x - half, y), new int2(center.x + half + 1, y + 1)),

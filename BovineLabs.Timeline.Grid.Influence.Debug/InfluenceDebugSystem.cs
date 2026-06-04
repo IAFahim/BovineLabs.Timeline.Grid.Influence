@@ -114,9 +114,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     Basis = basis,
                     DrawGrid = drawGrid,
                     DrawValues = drawValues,
-                    ActiveSlots = field.ActiveSlotsDeferred,
-                    CoordBySlot = field.CoordBySlotDeferred,
-                    Data = field.DataDeferred,
+                    ActiveSlots = field.ActiveSlotsList,
+                    CoordBySlot = field.CoordBySlotList,
+                    Data = field.DataList,
                     Spec = field.Spec
                 }.Schedule(dependency);
 
@@ -268,9 +268,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             public bool DrawGrid;
             public bool DrawValues;
 
-            [ReadOnly] public NativeArray<int> ActiveSlots;
-            [ReadOnly] public NativeArray<int2> CoordBySlot;
-            [ReadOnly] public NativeArray<int> Data;
+            [ReadOnly] public NativeList<int> ActiveSlots;
+            [ReadOnly] public NativeList<int2> CoordBySlot;
+            [ReadOnly] public NativeList<int> Data;
             public GridSpec Spec;
 
             public void Execute()

@@ -14,11 +14,55 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         static void HorizontalPass(int* field, int stride, int dimension)
         {
+            if (Avx2.IsAvx2Supported && dimension >= 8)
+            {
+                HorizontalPassAvx2(field, stride, dimension);
+            }
+            else
+            {
+                HorizontalPassScalar(field, stride, dimension);
+            }
+        }
+
+        static void HorizontalPassScalar(int* field, int stride, int dimension)
+        {
             for (int y = 0; y < dimension; y++)
             {
                 int* row = field + y * stride;
                 int running = 0;
                 for (int x = 0; x < dimension; x++)
+                {
+                    running += row[x];
+                    row[x] = running;
+                }
+            }
+        }
+
+        static void HorizontalPassAvx2(int* field, int stride, int dimension)
+        {
+            v256 broadcastLane3 = Avx.mm256_set1_epi32(3);
+            v256 highHalfMask = Avx.mm256_setr_epi32(0, 0, 0, 0, -1, -1, -1, -1);
+            int dim8 = dimension & ~7;
+
+            for (int y = 0; y < dimension; y++)
+            {
+                int* row = field + y * stride;
+                int carry = 0;
+                int x = 0;
+                for (; x < dim8; x += 8)
+                {
+                    v256 v = Avx.mm256_loadu_si256(row + x);
+                    v = Avx2.mm256_add_epi32(v, Avx2.mm256_slli_si256(v, 4));
+                    v = Avx2.mm256_add_epi32(v, Avx2.mm256_slli_si256(v, 8));
+                    v256 lowTotal = Avx2.mm256_permutevar8x32_epi32(v, broadcastLane3);
+                    v = Avx2.mm256_add_epi32(v, Avx2.mm256_and_si256(lowTotal, highHalfMask));
+                    v = Avx2.mm256_add_epi32(v, Avx.mm256_set1_epi32(carry));
+                    Avx.mm256_storeu_si256(row + x, v);
+                    carry = row[x + 7];
+                }
+
+                int running = carry;
+                for (; x < dimension; x++)
                 {
                     running += row[x];
                     row[x] = running;

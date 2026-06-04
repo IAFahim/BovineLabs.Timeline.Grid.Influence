@@ -14,7 +14,6 @@ using Unity.Transforms;
 
 namespace BovineLabs.Timeline.Grid.Influence
 {
-    [DisableAutoCreation]
     [UpdateInGroup(typeof(BovineLabs.Timeline.TimelineSystemGroup))]
     [UpdateAfter(typeof(BovineLabs.Timeline.TimelineComponentAnimationGroup))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation |

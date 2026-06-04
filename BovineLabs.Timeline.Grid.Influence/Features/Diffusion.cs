@@ -12,8 +12,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Diffusion
 {
     public struct DiffusionClipTag : IComponentData { }
 
-
-
     public struct DiffusionFieldConfig : IComponentData
     {
         public FieldId Id;
@@ -60,24 +58,25 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Diffusion
             var config = SystemAPI.GetSingleton<DiffusionFieldConfig>();
             ref var pair = ref regSingleton.Registry.Slot(config.Id.Value);
 
-            if (pair.Front.IsCreated)
+            int emitCapacity = pair.Front.IsCreated ? math.max(1024, pair.Front.ActiveSlotCount * pair.Front.Spec.ElementsPerChunk * 5) : 0;
+            int count = _clips.CalculateEntityCount();
+            int totalRequired = emitCapacity + count;
+
+            if (totalRequired > 0)
             {
-                var spec = pair.Front.Spec;
-                int emitCapacity = math.max(1024, pair.Front.ActiveSlotCount * pair.Front.Spec.ElementsPerChunk * 5); 
-                
                 if (!pair.PendingStamps.IsCreated)
                 {
-                    pair.PendingStamps = new NativeList<Stamp>(emitCapacity, state.WorldUpdateAllocator);
+                    pair.PendingStamps = new NativeList<Stamp>(totalRequired, state.WorldUpdateAllocator);
                 }
                 else
                 {
-                    pair.WriterDependency = new ResizeStampListJob
-                    {
-                        List = pair.PendingStamps,
-                        MinCapacity = pair.PendingStamps.Length + emitCapacity
-                    }.Schedule(pair.WriterDependency);
+                    pair.WriterDependency.Complete();
+                    pair.PendingStamps.Capacity = math.max(pair.PendingStamps.Capacity, pair.PendingStamps.Length + totalRequired);
                 }
+            }
 
+            if (pair.Front.IsCreated)
+            {
                 JobHandle feedback = new DiffusionFeedbackJob
                 {
                     ActiveSlots = pair.Front.ActiveSlotsDeferred,
@@ -93,11 +92,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Diffusion
                 state.Dependency = feedback;
             }
 
-            int count = _clips.CalculateEntityCount();
             if (count > 0)
             {
                 var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
-                if (!pair.PendingStamps.IsCreated) pair.PendingStamps = new NativeList<Stamp>(count, state.WorldUpdateAllocator);
 
                 JobHandle gather = new GatherDiffusionStampsJob
                 {

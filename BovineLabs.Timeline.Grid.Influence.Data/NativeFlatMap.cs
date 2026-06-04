@@ -1,6 +1,8 @@
 using System;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Jobs;
 using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data
@@ -74,7 +76,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             _state->used[i] = 1; _state->keys[i] = key; _state->vals[i] = value; _state->count++;
         }
 
-        // Backward-shift deletion: keeps probe sequences contiguous, no tombstones.
         public bool Remove(int2 key)
         {
             int i = Hash(key) & _state->mask;
@@ -113,7 +114,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             UnsafeUtility.Free(ou, _allocator);
         }
 
-        public ReadOnly AsReadOnly() => new ReadOnly(_state->keys, _state->vals, _state->used, _state->mask);
+        public ReadOnly AsReadOnly() => new ReadOnly(_state);
 
         public void Dispose()
         {
@@ -128,31 +129,46 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             this = default;
         }
 
-        public Unity.Jobs.JobHandle Dispose(Unity.Jobs.JobHandle inputDeps)
+        [BurstCompile]
+        struct FlatMapDisposeJob : IJob
         {
-            // Pointers are plain allocations; safe to free immediately after deps complete.
-            inputDeps.Complete();
-            Dispose();
-            return default;
+            [NativeDisableUnsafePtrRestriction] public State* State;
+            public Allocator Allocator;
+
+            public void Execute()
+            {
+                if (State != null)
+                {
+                    if (State->keys != null) UnsafeUtility.Free(State->keys, Allocator);
+                    if (State->vals != null) UnsafeUtility.Free(State->vals, Allocator);
+                    if (State->used != null) UnsafeUtility.Free(State->used, Allocator);
+                    UnsafeUtility.Free(State, Allocator);
+                }
+            }
+        }
+
+        public JobHandle Dispose(JobHandle inputDeps)
+        {
+            if (_state == null) return inputDeps;
+            var job = new FlatMapDisposeJob { State = _state, Allocator = _allocator };
+            _state = null;
+            this = default;
+            return job.Schedule(inputDeps);
         }
 
         public readonly struct ReadOnly
         {
-            [NativeDisableUnsafePtrRestriction] readonly int2* _keys;
-            [NativeDisableUnsafePtrRestriction] readonly int* _vals;
-            [NativeDisableUnsafePtrRestriction] readonly byte* _used;
-            readonly int _mask;
+            [NativeDisableUnsafePtrRestriction] readonly State* _state;
 
-            internal ReadOnly(int2* keys, int* vals, byte* used, int mask)
-            { _keys = keys; _vals = vals; _used = used; _mask = mask; }
+            internal ReadOnly(State* state) { _state = state; }
 
             public bool TryGetValue(int2 key, out int value)
             {
-                int i = Hash(key) & _mask;
-                while (_used[i] != 0)
+                int i = Hash(key) & _state->mask;
+                while (_state->used[i] != 0)
                 {
-                    if (_keys[i].x == key.x && _keys[i].y == key.y) { value = _vals[i]; return true; }
-                    i = (i + 1) & _mask;
+                    if (_state->keys[i].x == key.x && _state->keys[i].y == key.y) { value = _state->vals[i]; return true; }
+                    i = (i + 1) & _state->mask;
                 }
                 value = 0;
                 return false;

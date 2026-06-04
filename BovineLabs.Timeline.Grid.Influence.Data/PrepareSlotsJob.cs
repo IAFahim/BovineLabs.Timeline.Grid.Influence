@@ -11,6 +11,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         [ReadOnly] public NativeArray<Stamp> Stamps;
         public NativeList<int> Offsets;
         public NativeList<WeightedRect> Spans;
+        public NativeList<int> StampCount;
         
         public NativeFlatMap SlotByCoord;
         public NativeList<int> FreeSlots;
@@ -20,9 +21,41 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public NativeList<int> Data;
         public GridSpec Spec;
         public uint FrameId;
+        public bool ResetFrame;
+        public uint RetentionFrames;
 
         public void Execute()
         {
+            if (ResetFrame)
+            {
+                for (int i = 0; i < LastWrittenBySlot.Length; i++)
+                {
+                    LastWrittenBySlot[i] = 0;
+                }
+            }
+
+            if (RetentionFrames != uint.MaxValue)
+            {
+                uint minValidFrame = FrameId > RetentionFrames ? FrameId - RetentionFrames : 0;
+                for (int i = 0; i < LastWrittenBySlot.Length; i++)
+                {
+                    if (LastWrittenBySlot[i] != 0 && LastWrittenBySlot[i] < minValidFrame)
+                    {
+                        LastWrittenBySlot[i] = 0;
+                        FreeSlots.Add(i);
+                        SlotByCoord.Remove(CoordBySlot[i]);
+                    }
+                }
+            }
+
+            ActiveSlots.Clear();
+
+            if (!Stamps.IsCreated)
+            {
+                StampCount.Length = 0;
+                return;
+            }
+            StampCount.Length = Stamps.Length;
             long running = 0;
             Offsets.Length = Stamps.Length + 1;
             for (int i = 0; i < Stamps.Length; i++)

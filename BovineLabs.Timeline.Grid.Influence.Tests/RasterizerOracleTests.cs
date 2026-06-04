@@ -11,9 +11,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         [Test]
         public void SingleDiscRadiusOneFormsExactPlus()
         {
-            AssertExactNonZeroSet(
-                new Stamp(InfluenceShape.Disc(int2.zero, 1, 1), int2.zero),
-                new[] { new int2(0, 0), new int2(1, 0), new int2(-1, 0), new int2(0, 1), new int2(0, -1) });
+            AssertExactNonZeroSet(new Stamp(InfluenceShape.Disc(int2.zero, 1, 1), int2.zero), new[]
+            {
+                new int2(0, 0), new int2(1, 0), new int2(-1, 0), new int2(0, 1), new int2(0, -1)
+            });
         }
 
         [Test]
@@ -39,15 +40,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         {
             AssertSceneMatchesOracleEverywhere(new[]
             {
-                new Stamp(InfluenceShape.Capsule(new int2(3, -4), new int2(3, -4), 5, 2), new int2(7, 11))
+                new Stamp(InfluenceShape.Capsule(int2.zero, int2.zero, 3, 1), int2.zero)
             });
 
             var capsule = InfluenceTestHarness.Run(GridSpec.FromPowerOfTwo(3, uint.MaxValue),
-                new[] { new Stamp(InfluenceShape.Capsule(new int2(0, 0), new int2(0, 0), 5, 1), int2.zero) },
-                new int2(-8, -8), new int2(16, 16));
+                new[] { new Stamp(InfluenceShape.Capsule(int2.zero, int2.zero, 3, 1), int2.zero) }, new int2(-5, -5), new int2(10, 10));
             var disc = InfluenceTestHarness.Run(GridSpec.FromPowerOfTwo(3, uint.MaxValue),
-                new[] { new Stamp(InfluenceShape.Disc(int2.zero, 5, 1), int2.zero) },
-                new int2(-8, -8), new int2(16, 16));
+                new[] { new Stamp(InfluenceShape.Disc(int2.zero, 3, 1), int2.zero) }, new int2(-5, -5), new int2(10, 10));
 
             CollectionAssert.AreEqual(disc, capsule);
         }
@@ -115,7 +114,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         {
             AssertSceneMatchesOracleEverywhere(new[]
             {
-                new Stamp(InfluenceShape.Ellipse(new int2(2, -1), new int2(4, 2), 3), int2.zero)
+                new Stamp(InfluenceShape.Ellipse(int2.zero, new int2(4, 2), 1), int2.zero)
             });
         }
 

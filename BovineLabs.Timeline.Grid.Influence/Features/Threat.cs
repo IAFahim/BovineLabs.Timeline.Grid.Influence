@@ -10,14 +10,8 @@ using BovineLabs.Timeline.Grid.Influence.Fields;
 
 namespace BovineLabs.Timeline.Grid.Influence.Features.Threat
 {
-
-
-
-
     public struct ThreatClipTag : IComponentData { }
-
-
-
+    
     public struct ThreatField : IComponentData { public FieldId Id; }
 
     [UpdateInGroup(typeof(SimulationSystemGroup))]
@@ -70,11 +64,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Threat
                 }
                 else
                 {
-                    pair.WriterDependency = new ResizeStampListJob
-                    {
-                        List = pair.PendingStamps,
-                        MinCapacity = pair.PendingStamps.Length + count
-                    }.Schedule(pair.WriterDependency);
+                    pair.WriterDependency.Complete();
+                    pair.PendingStamps.Capacity = math.max(pair.PendingStamps.Capacity, pair.PendingStamps.Length + count);
                 }
 
                 JobHandle gather = new GatherThreatStampsJob

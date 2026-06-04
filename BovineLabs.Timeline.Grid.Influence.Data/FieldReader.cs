@@ -7,14 +7,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 {
     public unsafe struct FieldReader
     {
-        [ReadOnly] NativeParallelHashMap<int2, int> _slotByCoord;
+        [ReadOnly] NativeFlatMap.ReadOnly _slotByCoord;
         [ReadOnly] NativeArray<uint> _lastWrittenBySlot;
         [NativeDisableUnsafePtrRestriction] int* _data;
         GridSpec _spec;
         uint _frameId;
 
         internal FieldReader(
-            NativeParallelHashMap<int2, int> slotByCoord,
+            NativeFlatMap.ReadOnly slotByCoord,
             NativeArray<uint> lastWrittenBySlot,
             int* data,
             in GridSpec spec,

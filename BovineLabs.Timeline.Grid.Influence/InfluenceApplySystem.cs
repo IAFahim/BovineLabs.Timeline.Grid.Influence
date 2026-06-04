@@ -76,9 +76,7 @@ namespace BovineLabs.Timeline.Grid.Influence
                     LocalToWorldLookup = SystemAPI.GetComponentLookup<LocalToWorld>(true)
                 }.ScheduleParallel(_activeQuery, state.Dependency);
 
-                gather.Complete();
-
-                handle = field.Schedule(stamps.AsArray(), default);
+                handle = field.Schedule(stamps.AsDeferredJobArray(), gather);
             }
 
             fieldRw.ValueRW.Field = field;

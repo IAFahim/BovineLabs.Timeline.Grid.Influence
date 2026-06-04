@@ -9,7 +9,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 {
     public unsafe partial struct InfluenceField : INativeDisposable
     {
-        NativeParallelHashMap<int2, int> _slotByCoord;
+        NativeFlatMap _slotByCoord;
         NativeList<int2> _coordBySlot;
         NativeList<uint> _lastWrittenBySlot;
         NativeList<int> _freeSlots;
@@ -30,7 +30,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             return new InfluenceField
             {
-                _slotByCoord = new NativeParallelHashMap<int2, int>(64, allocator),
+                _slotByCoord = NativeFlatMap.Create(64, allocator),
                 _coordBySlot = new NativeList<int2>(64, allocator),
                 _lastWrittenBySlot = new NativeList<uint>(64, allocator),
                 _freeSlots = new NativeList<int>(64, allocator),
@@ -53,7 +53,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             ThrowIfNotCreated();
             return new FieldReader(
-                _slotByCoord,
+                _slotByCoord.AsReadOnly(),
                 _lastWrittenBySlot.AsArray(),
                 (int*)_data.GetUnsafePtr(),
                 _spec,
@@ -69,8 +69,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public JobHandle Schedule(NativeArray<Stamp> stamps, JobHandle dependsOn)
         {
             ThrowIfNotCreated();
-            Complete();
-            dependsOn.Complete();
+            JobHandle.CombineDependencies(_dependency, dependsOn).Complete();
+            _dependency = default;
 
             AdvanceFrame();
             EvictStale();
@@ -112,7 +112,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             JobHandle scatter = new ScatterJob
             {
                 Spans = spans,
-                SlotByCoord = _slotByCoord,
+                SlotByCoord = _slotByCoord.AsReadOnly(),
                 Data = _data.AsArray(),
                 Spec = _spec
             }.Schedule(JobHandle.CombineDependencies(rasterize, clear));
@@ -319,7 +319,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         struct ScatterJob : IJob
         {
             [ReadOnly] public NativeArray<WeightedRect> Spans;
-            [ReadOnly] public NativeParallelHashMap<int2, int> SlotByCoord;
+            [ReadOnly] public NativeFlatMap.ReadOnly SlotByCoord;
             public NativeArray<int> Data;
             public GridSpec Spec;
 

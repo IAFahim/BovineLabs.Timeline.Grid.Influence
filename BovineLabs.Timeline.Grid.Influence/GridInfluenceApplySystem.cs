@@ -65,7 +65,7 @@ namespace BovineLabs.Timeline.Grid.Influence
 
         [BurstCompile]
         [WithAll(typeof(ClipActive))]
-        partial struct GatherStampsJob : IJobEntity
+        private partial struct GatherStampsJob : IJobEntity
         {
             public NativeParallelMultiHashMap<int, Stamp>.ParallelWriter StampsMap;
             [ReadOnly] public NativeHashMap<ushort, int> KeyToSlot;
@@ -78,9 +78,9 @@ namespace BovineLabs.Timeline.Grid.Influence
             public float CellSize;
             public GridBasis Basis;
 
-            void Execute(in InfluenceClipData clip, in TrackBinding binding, in ClipWeight weight)
+            private void Execute(in InfluenceClipData clip, in TrackBinding binding, in ClipWeight weight)
             {
-                if (!KeyToSlot.TryGetValue(clip.FieldKey, out int slotIndex)) return;
+                if (!KeyToSlot.TryGetValue(clip.FieldKey, out var slotIndex)) return;
 
                 var targetEntity = binding.Value;
                 if (targetEntity == Entity.Null) return;
@@ -94,22 +94,20 @@ namespace BovineLabs.Timeline.Grid.Influence
                     if (baseTarget != Entity.Null)
                     {
                         originEntity = baseTarget;
-                        if (clip.OriginLinkKey != 0 && EntityLinkResolver.TryResolve(baseTarget, clip.OriginLinkKey, LinkSources, Links, out var linked))
-                        {
-                            originEntity = linked;
-                        }
+                        if (clip.OriginLinkKey != 0 && EntityLinkResolver.TryResolve(baseTarget, clip.OriginLinkKey,
+                                LinkSources, Links, out var linked)) originEntity = linked;
                     }
                 }
 
                 if (!LocalToWorldLookup.TryGetComponent(originEntity, out var localToWorld)) return;
 
-                int scaledWeight = (int)math.round(clip.Shape.Weight * weight.Value);
+                var scaledWeight = (int)math.round(clip.Shape.Weight * weight.Value);
                 if (scaledWeight == 0) return;
 
-                float3 world = localToWorld.Position + math.rotate(localToWorld.Rotation, clip.LocalOffset);
-                float2 projected = Basis.ToGridSpace(world);
+                var world = localToWorld.Position + math.rotate(localToWorld.Rotation, clip.LocalOffset);
+                var projected = Basis.ToGridSpace(world);
 
-                int2 origin = new int2(
+                var origin = new int2(
                     (int)math.floor(projected.x / CellSize),
                     (int)math.floor(projected.y / CellSize));
 

@@ -10,10 +10,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         [Test]
         public void FloorSqrtSatisfiesInvariantOverSmallDomain()
         {
-            for (long v = 0; v <= 1_000_000; v++)
-            {
-                AssertFloorSqrt(v);
-            }
+            for (long v = 0; v <= 1_000_000; v++) AssertFloorSqrt(v);
         }
 
         [Test]
@@ -21,7 +18,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         {
             for (long k = 1; k < 3_000_000_000L; k += 7_919)
             {
-                long square = k * k;
+                var square = k * k;
                 Assert.AreEqual(k, IntegerMath.FloorSqrt(square), $"sqrt({square})");
                 Assert.AreEqual(k - 1, IntegerMath.FloorSqrt(square - 1), $"sqrt({square - 1})");
                 Assert.AreEqual(k, IntegerMath.FloorSqrt(square + 1), $"sqrt({square + 1})");
@@ -46,7 +43,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         [Test]
         public void EstimateSpanCountSaturatesForEnormousShapes()
         {
-            var huge = InfluenceShape.Capsule(new int2(int.MinValue / 2, 0), new int2(int.MaxValue / 2, 0), int.MaxValue, 1);
+            var huge = InfluenceShape.Capsule(new int2(int.MinValue / 2, 0), new int2(int.MaxValue / 2, 0),
+                int.MaxValue, 1);
             Assert.DoesNotThrow(() => Rasterizer.EstimateSpanCount(huge));
             Assert.AreEqual(int.MaxValue, Rasterizer.EstimateSpanCount(huge));
         }
@@ -54,7 +52,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         [Test]
         public void GridSpecHoldsSafetyInvariantsAndClampsPower()
         {
-            for (int power = 1; power <= 8; power++)
+            for (var power = 1; power <= 8; power++)
             {
                 var spec = GridSpec.FromPowerOfTwo(power, 99);
                 Assert.AreEqual(1 << power, spec.ChunkSize);
@@ -75,23 +73,24 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         [Test]
         public void ChunkMathRoundTripsAcrossNegativeCoordinates()
         {
-            for (int log2 = 1; log2 <= 6; log2++)
+            for (var log2 = 1; log2 <= 6; log2++)
             {
-                int chunkSize = 1 << log2;
-                for (int cell = -500; cell <= 500; cell++)
+                var chunkSize = 1 << log2;
+                for (var cell = -500; cell <= 500; cell++)
                 {
-                    int2 c = new int2(cell, -cell);
-                    int2 coord = ChunkMath.ChunkCoordOf(c, log2);
-                    int2 chunkBase = ChunkMath.ChunkBaseOf(coord, log2);
-                    int2 local = ChunkMath.LocalOf(c, chunkBase);
+                    var c = new int2(cell, -cell);
+                    var coord = ChunkMath.ChunkCoordOf(c, log2);
+                    var chunkBase = ChunkMath.ChunkBaseOf(coord, log2);
+                    var local = ChunkMath.LocalOf(c, chunkBase);
 
-                    Assert.IsTrue(ChunkMath.ContainsLocal(local, chunkSize), $"local out of range log2 {log2} cell {cell}");
+                    Assert.IsTrue(ChunkMath.ContainsLocal(local, chunkSize),
+                        $"local out of range log2 {log2} cell {cell}");
                     Assert.AreEqual(c, chunkBase + local, $"round trip log2 {log2} cell {cell}");
                 }
             }
         }
 
-        static void AssertFloorSqrt(long v)
+        private static void AssertFloorSqrt(long v)
         {
             long r = IntegerMath.FloorSqrt(v);
             Assert.GreaterOrEqual(r, 0);

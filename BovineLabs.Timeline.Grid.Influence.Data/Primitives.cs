@@ -60,21 +60,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int FloorSqrt(long value)
         {
-            if (value <= 0)
-            {
-                return 0;
-            }
+            if (value <= 0) return 0;
 
-            long root = (long)math.sqrt((double)value);
-            while ((root + 1) * (root + 1) <= value)
-            {
-                root++;
-            }
+            var root = (long)math.sqrt((double)value);
+            while ((root + 1) * (root + 1) <= value) root++;
 
-            while (root * root > value)
-            {
-                root--;
-            }
+            while (root * root > value) root--;
 
             return root > int.MaxValue ? int.MaxValue : (int)root;
         }
@@ -82,15 +73,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int ClampToInt(long value)
         {
-            if (value <= 0)
-            {
-                return 0;
-            }
+            if (value <= 0) return 0;
 
             return value > int.MaxValue ? int.MaxValue : (int)value;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int SaturatingAdd(int a, int b) => ClampToInt((long)a + b);
+        public static int SaturatingAdd(int a, int b)
+        {
+            return ClampToInt((long)a + b);
+        }
     }
 }

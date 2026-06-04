@@ -1,4 +1,3 @@
-using System;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -26,7 +25,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         public static NativeFlatMap Create(int minCapacity, Allocator allocator)
         {
-            int cap = 1;
+            var cap = 1;
             while (cap < minCapacity) cap <<= 1;
             if (cap < 8) cap = 8;
             var m = new NativeFlatMap { _allocator = allocator };
@@ -37,29 +36,39 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             return m;
         }
 
-        void Alloc(int cap)
+        private void Alloc(int cap)
         {
-            _state->keys = (int2*)UnsafeUtility.Malloc((long)cap * sizeof(int2), UnsafeUtility.AlignOf<int2>(), _allocator);
-            _state->vals = (int*)UnsafeUtility.Malloc((long)cap * sizeof(int), UnsafeUtility.AlignOf<int>(), _allocator);
+            _state->keys =
+                (int2*)UnsafeUtility.Malloc((long)cap * sizeof(int2), UnsafeUtility.AlignOf<int2>(), _allocator);
+            _state->vals =
+                (int*)UnsafeUtility.Malloc((long)cap * sizeof(int), UnsafeUtility.AlignOf<int>(), _allocator);
             _state->used = (byte*)UnsafeUtility.Malloc(cap, 1, _allocator);
             UnsafeUtility.MemClear(_state->used, cap);
         }
 
-        static int Hash(int2 c)
+        private static int Hash(int2 c)
         {
-            uint h = (uint)(c.x * 73856093) ^ (uint)(c.y * 19349663);
-            h ^= h >> 15; h *= 0x2c1b3c6du; h ^= h >> 12;
+            var h = (uint)(c.x * 73856093) ^ (uint)(c.y * 19349663);
+            h ^= h >> 15;
+            h *= 0x2c1b3c6du;
+            h ^= h >> 12;
             return (int)h;
         }
 
         public bool TryGetValue(int2 key, out int value)
         {
-            int i = Hash(key) & _state->mask;
+            var i = Hash(key) & _state->mask;
             while (_state->used[i] != 0)
             {
-                if (_state->keys[i].x == key.x && _state->keys[i].y == key.y) { value = _state->vals[i]; return true; }
+                if (_state->keys[i].x == key.x && _state->keys[i].y == key.y)
+                {
+                    value = _state->vals[i];
+                    return true;
+                }
+
                 i = (i + 1) & _state->mask;
             }
+
             value = 0;
             return false;
         }
@@ -67,27 +76,37 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public void Add(int2 key, int value)
         {
             if ((_state->count + 1) * 4 >= (_state->mask + 1) * 3) Grow();
-            int i = Hash(key) & _state->mask;
+            var i = Hash(key) & _state->mask;
             while (_state->used[i] != 0)
             {
-                if (_state->keys[i].x == key.x && _state->keys[i].y == key.y) { _state->vals[i] = value; return; }
+                if (_state->keys[i].x == key.x && _state->keys[i].y == key.y)
+                {
+                    _state->vals[i] = value;
+                    return;
+                }
+
                 i = (i + 1) & _state->mask;
             }
-            _state->used[i] = 1; _state->keys[i] = key; _state->vals[i] = value; _state->count++;
+
+            _state->used[i] = 1;
+            _state->keys[i] = key;
+            _state->vals[i] = value;
+            _state->count++;
         }
 
         public bool Remove(int2 key)
         {
-            int i = Hash(key) & _state->mask;
+            var i = Hash(key) & _state->mask;
             while (_state->used[i] != 0)
             {
                 if (_state->keys[i].x == key.x && _state->keys[i].y == key.y) break;
                 i = (i + 1) & _state->mask;
                 if (_state->used[i] == 0) return false;
             }
+
             if (_state->used[i] == 0) return false;
 
-            int j = i;
+            var j = i;
             while (true)
             {
                 _state->used[i] = 0;
@@ -95,26 +114,43 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 do
                 {
                     j = (j + 1) & _state->mask;
-                    if (_state->used[j] == 0) { _state->count--; return true; }
+                    if (_state->used[j] == 0)
+                    {
+                        _state->count--;
+                        return true;
+                    }
+
                     k = Hash(_state->keys[j]) & _state->mask;
-                } while ((i <= j) ? (i < k && k <= j) : (i < k || k <= j));
-                _state->keys[i] = _state->keys[j]; _state->vals[i] = _state->vals[j]; _state->used[i] = 1;
+                } while (i <= j ? i < k && k <= j : i < k || k <= j);
+
+                _state->keys[i] = _state->keys[j];
+                _state->vals[i] = _state->vals[j];
+                _state->used[i] = 1;
                 i = j;
             }
         }
 
-        void Grow()
+        private void Grow()
         {
-            int2* ok = _state->keys; int* ov = _state->vals; byte* ou = _state->used; int oldCap = _state->mask + 1;
-            _state->mask = (oldCap << 1) - 1; _state->count = 0;
+            var ok = _state->keys;
+            var ov = _state->vals;
+            var ou = _state->used;
+            var oldCap = _state->mask + 1;
+            _state->mask = (oldCap << 1) - 1;
+            _state->count = 0;
             Alloc(oldCap << 1);
-            for (int t = 0; t < oldCap; t++) if (ou[t] != 0) Add(ok[t], ov[t]);
+            for (var t = 0; t < oldCap; t++)
+                if (ou[t] != 0)
+                    Add(ok[t], ov[t]);
             UnsafeUtility.Free(ok, _allocator);
             UnsafeUtility.Free(ov, _allocator);
             UnsafeUtility.Free(ou, _allocator);
         }
 
-        public ReadOnly AsReadOnly() => new ReadOnly(_state);
+        public ReadOnly AsReadOnly()
+        {
+            return new ReadOnly(_state);
+        }
 
         public void Dispose()
         {
@@ -126,11 +162,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 UnsafeUtility.Free(_state, _allocator);
                 _state = null;
             }
+
             this = default;
         }
 
         [BurstCompile]
-        struct FlatMapDisposeJob : IJob
+        private struct FlatMapDisposeJob : IJob
         {
             [NativeDisableUnsafePtrRestriction] public State* State;
             public Allocator Allocator;
@@ -158,18 +195,27 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         public readonly struct ReadOnly
         {
-            [NativeDisableUnsafePtrRestriction] readonly State* _state;
+            [NativeDisableUnsafePtrRestriction] private readonly State* _state;
 
-            internal ReadOnly(State* state) { _state = state; }
+            internal ReadOnly(State* state)
+            {
+                _state = state;
+            }
 
             public bool TryGetValue(int2 key, out int value)
             {
-                int i = Hash(key) & _state->mask;
+                var i = Hash(key) & _state->mask;
                 while (_state->used[i] != 0)
                 {
-                    if (_state->keys[i].x == key.x && _state->keys[i].y == key.y) { value = _state->vals[i]; return true; }
+                    if (_state->keys[i].x == key.x && _state->keys[i].y == key.y)
+                    {
+                        value = _state->vals[i];
+                        return true;
+                    }
+
                     i = (i + 1) & _state->mask;
                 }
+
                 value = 0;
                 return false;
             }

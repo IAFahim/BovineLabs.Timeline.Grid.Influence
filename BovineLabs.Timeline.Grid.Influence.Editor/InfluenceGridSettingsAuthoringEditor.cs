@@ -13,9 +13,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
         {
             return property.name switch
             {
-                nameof(InfluenceGridSettingsAuthoring.Fields) => new AssetCreator<GridFieldSchemaObject>(this.serializedObject, property).Element,
-                nameof(InfluenceGridSettingsAuthoring.Stamps) => new AssetCreator<GridStampSchemaObject>(this.serializedObject, property).Element,
-                _ => base.CreateElement(property),
+                nameof(InfluenceGridSettingsAuthoring.Fields) => new AssetCreator<GridFieldSchemaObject>(
+                    serializedObject, property).Element,
+                nameof(InfluenceGridSettingsAuthoring.Stamps) => new AssetCreator<GridStampSchemaObject>(
+                    serializedObject, property).Element,
+                _ => base.CreateElement(property)
             };
         }
     }

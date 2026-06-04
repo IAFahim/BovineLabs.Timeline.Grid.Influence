@@ -1,3 +1,4 @@
+using System;
 using BovineLabs.Core.Authoring.Settings;
 using BovineLabs.Core.Settings;
 using BovineLabs.Timeline.Grid.Influence.Data;
@@ -14,8 +15,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public Vector3 PlaneNormal = Vector3.up;
         public int StrideAlignment = 4;
 
-        public GridFieldSchemaObject[] Fields = System.Array.Empty<GridFieldSchemaObject>();
-        public GridStampSchemaObject[] Stamps = System.Array.Empty<GridStampSchemaObject>();
+        public GridFieldSchemaObject[] Fields = Array.Empty<GridFieldSchemaObject>();
+        public GridStampSchemaObject[] Stamps = Array.Empty<GridStampSchemaObject>();
 
         public override void Bake(Baker<SettingsAuthoring> baker)
         {

@@ -11,7 +11,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         public void EmptyScheduleAdvancesFrameAndReadsZero()
         {
             var field = InfluenceField.Create(GridSpec.FromPowerOfTwo(2, uint.MaxValue), Allocator.Persistent);
-            uint before = field.FrameId;
+            var before = field.FrameId;
             field.Schedule(default, default).Complete();
 
             Assert.AreEqual(before + 1, field.FrameId);
@@ -24,17 +24,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         {
             var spec = GridSpec.FromPowerOfTwo(3, uint.MaxValue);
             var field = InfluenceField.Create(spec, Allocator.Persistent);
-            var stamps = new NativeArray<Stamp>(new[] { new Stamp(InfluenceShape.Disc(int2.zero, 4, 5), new int2(2, 2)) }, Allocator.TempJob);
+            var stamps =
+                new NativeArray<Stamp>(new[] { new Stamp(InfluenceShape.Disc(int2.zero, 4, 5), new int2(2, 2)) },
+                    Allocator.TempJob);
             field.Schedule(stamps, default).Complete();
 
             var reader = field.AsReader();
-            for (int x = -6; x <= 10; x++)
-            {
-                for (int y = -6; y <= 10; y++)
-                {
-                    Assert.AreEqual(reader.ReadCell(new int2(x, y)), field.CompleteAndRead(new int2(x, y)));
-                }
-            }
+            for (var x = -6; x <= 10; x++)
+            for (var y = -6; y <= 10; y++)
+                Assert.AreEqual(reader.ReadCell(new int2(x, y)), field.CompleteAndRead(new int2(x, y)));
 
             stamps.Dispose();
             field.Dispose();
@@ -44,7 +42,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         public void ChunkWrittenLastFrameReadsStaleAsZero()
         {
             var field = InfluenceField.Create(GridSpec.FromPowerOfTwo(2, uint.MaxValue), Allocator.Persistent);
-            var stamps = new NativeArray<Stamp>(new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(2, 2), 9), new int2(1, 1)) }, Allocator.TempJob);
+            var stamps =
+                new NativeArray<Stamp>(
+                    new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(2, 2), 9), new int2(1, 1)) },
+                    Allocator.TempJob);
 
             field.Schedule(stamps, default).Complete();
             Assert.AreEqual(9, field.AsReader().ReadCell(new int2(1, 1)));
@@ -61,19 +62,25 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         {
             var field = InfluenceField.Create(GridSpec.FromPowerOfTwo(2, 1), Allocator.Persistent);
 
-            var farA = new NativeArray<Stamp>(new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(1, 1), 1), new int2(0, 0)) }, Allocator.TempJob);
+            var farA = new NativeArray<Stamp>(
+                new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(1, 1), 1), new int2(0, 0)) },
+                Allocator.TempJob);
             field.Schedule(farA, default).Complete();
-            int slotsAfterFirst = InfluenceTestHarness.GetPrivate<NativeList<int>>(field, "_coordBySlot").Length;
+            var slotsAfterFirst = InfluenceTestHarness.GetPrivate<NativeList<int>>(field, "_coordBySlot").Length;
 
             field.Schedule(default, default).Complete();
             field.Schedule(default, default).Complete();
 
-            Assert.Greater(InfluenceTestHarness.GetPrivate<NativeList<int>>(field, "_freeSlots").Length, 0, "slot was not evicted");
+            Assert.Greater(InfluenceTestHarness.GetPrivate<NativeList<int>>(field, "_freeSlots").Length, 0,
+                "slot was not evicted");
 
-            var farB = new NativeArray<Stamp>(new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(1, 1), 2), new int2(1000, 1000)) }, Allocator.TempJob);
+            var farB = new NativeArray<Stamp>(
+                new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(1, 1), 2), new int2(1000, 1000)) },
+                Allocator.TempJob);
             field.Schedule(farB, default).Complete();
 
-            Assert.AreEqual(slotsAfterFirst, InfluenceTestHarness.GetPrivate<NativeList<int>>(field, "_coordBySlot").Length, "slot was not reused");
+            Assert.AreEqual(slotsAfterFirst,
+                InfluenceTestHarness.GetPrivate<NativeList<int>>(field, "_coordBySlot").Length, "slot was not reused");
             Assert.AreEqual(2, field.AsReader().ReadCell(new int2(1000, 1000)));
 
             farA.Dispose();
@@ -87,12 +94,17 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             var field = InfluenceField.Create(GridSpec.FromPowerOfTwo(2, uint.MaxValue), Allocator.Persistent);
             InfluenceTestHarness.SetPrivate(ref field, "_frameId", uint.MaxValue - 1u);
 
-            var first = new NativeArray<Stamp>(new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(1, 1), 7), new int2(0, 0)) }, Allocator.TempJob);
+            var first = new NativeArray<Stamp>(
+                new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(1, 1), 7), new int2(0, 0)) },
+                Allocator.TempJob);
             field.Schedule(first, default).Complete();
             Assert.AreEqual(uint.MaxValue, field.FrameId);
             Assert.AreEqual(7, field.AsReader().ReadCell(new int2(0, 0)));
 
-            var second = new NativeArray<Stamp>(new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(1, 1), 3), new int2(1000, 1000)) }, Allocator.TempJob);
+            var second =
+                new NativeArray<Stamp>(
+                    new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(1, 1), 3), new int2(1000, 1000)) },
+                    Allocator.TempJob);
             field.Schedule(second, default).Complete();
 
             Assert.AreEqual(1u, field.FrameId, "wraparound did not reset frame");

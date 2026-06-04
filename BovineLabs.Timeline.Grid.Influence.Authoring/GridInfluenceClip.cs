@@ -1,27 +1,27 @@
+using System;
 using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Entities;
-using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Timeline;
 
 namespace BovineLabs.Timeline.Grid.Influence.Authoring
 {
-    [System.Serializable]
+    [Serializable]
     public sealed class GridInfluenceClip : DOTSClip, ITimelineClipAsset
     {
-        [Header("Schemas")]
-        public GridFieldSchemaObject Field;
+        [Header("Schemas")] public GridFieldSchemaObject Field;
+
         public GridStampSchemaObject Stamp;
 
-        [Header("Transform")]
-        public float WeightMultiplier = 1.0f;
+        [Header("Transform")] public float WeightMultiplier = 1.0f;
+
         public Vector3 LocalOffset;
 
-        [Header("Routing")]
-        public Target originTarget = Target.Owner;
+        [Header("Routing")] public Target originTarget = Target.Owner;
+
         public EntityLinkSchema originLink;
 
         public override double duration => 1.0;
@@ -45,15 +45,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             context.Baker.DependsOn(Stamp);
 
             ushort linkKey = 0;
-            if (originLink != null && EntityLinkAuthoringUtility.TryGetKey(originLink, out var key))
-            {
-                linkKey = key;
-            }
+            if (originLink != null && EntityLinkAuthoringUtility.TryGetKey(originLink, out var key)) linkKey = key;
 
             if (context.Binding != null && context.Binding.Target != Entity.Null)
-            {
                 context.Baker.AddTransformUsageFlags(context.Binding.Target, TransformUsageFlags.Dynamic);
-            }
 
             context.Baker.AddComponent(clipEntity, new InfluenceClipData
             {

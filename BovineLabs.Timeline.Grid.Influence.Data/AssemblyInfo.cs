@@ -5,4 +5,3 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("BovineLabs.Timeline.Grid.Influence.Debug")]
 [assembly: InternalsVisibleTo("BovineLabs.Timeline.Grid.Influence.Editor")]
 [assembly: InternalsVisibleTo("BovineLabs.Timeline.Grid.Influence.Tests")]
-

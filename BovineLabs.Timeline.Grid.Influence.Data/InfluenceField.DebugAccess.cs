@@ -4,19 +4,21 @@ using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data
 {
-    public unsafe partial struct InfluenceField
+    public partial struct InfluenceField
     {
         internal NativeArray<int> ActiveSlotsDeferred => _activeSlots.AsDeferredJobArray();
         internal NativeArray<int2> CoordBySlotDeferred => _coordBySlot.AsDeferredJobArray();
         internal NativeArray<int> DataDeferred => _data.AsDeferredJobArray();
         internal NativeFlatMap.ReadOnly SlotByCoordReadOnly => _slotByCoord.AsReadOnly();
-        
+
         internal NativeList<int> ActiveSlotsList => _activeSlots;
         internal NativeList<int2> CoordBySlotList => _coordBySlot;
         internal NativeList<int> DataList => _data;
         internal int ActiveChunkCount => _activeSlots.Length;
 
         internal void PublishDependency(JobHandle handle)
-            => _dependency = JobHandle.CombineDependencies(_dependency, handle);
+        {
+            _dependency = JobHandle.CombineDependencies(_dependency, handle);
+        }
     }
 }

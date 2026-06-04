@@ -7,102 +7,93 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 {
     public class DiffusionIntegrationTests
     {
-        static int[,] StepOracle(int[,] front, Stamp[] stamps, int2 boxMin, int decay, int spreadDenom)
+        private static int[,] StepOracle(int[,] front, Stamp[] stamps, int2 boxMin, int decay, int spreadDenom)
         {
-            int w = front.GetLength(0);
-            int h = front.GetLength(1);
-            int[,] back = new int[w, h];
-            
-            for (int x = 0; x < w; x++)
+            var w = front.GetLength(0);
+            var h = front.GetLength(1);
+            var back = new int[w, h];
+
+            for (var x = 0; x < w; x++)
+            for (var y = 0; y < h; y++)
             {
-                for (int y = 0; y < h; y++)
+                var self = front[x, y];
+                var incoming = Spread(front, x - 1, y, decay, spreadDenom) +
+                               Spread(front, x + 1, y, decay, spreadDenom) +
+                               Spread(front, x, y - 1, decay, spreadDenom) +
+                               Spread(front, x, y + 1, decay, spreadDenom);
+                var retained = 0;
+                if (self != 0)
                 {
-                    int self = front[x, y];
-                    int incoming = Spread(front, x - 1, y, decay, spreadDenom) +
-                                   Spread(front, x + 1, y, decay, spreadDenom) +
-                                   Spread(front, x, y - 1, decay, spreadDenom) +
-                                   Spread(front, x, y + 1, decay, spreadDenom);
-                    int retained = 0;
-                    if (self != 0)
-                    {
-                        int vp = self - (int)((long)self * decay / 1000);
-                        if (vp != 0)
-                        {
-                            retained = vp - 4 * (vp / spreadDenom);
-                        }
-                    }
-                    back[x, y] = retained + incoming;
+                    var vp = self - (int)((long)self * decay / 1000);
+                    if (vp != 0) retained = vp - 4 * (vp / spreadDenom);
                 }
+
+                back[x, y] = retained + incoming;
             }
 
-            for (int s = 0; s < stamps.Length; s++)
-            {
-                for (int x = 0; x < w; x++)
-                {
-                    for (int y = 0; y < h; y++)
-                    {
-                        back[x, y] += (int)InfluenceTestHarness.Contribution(stamps[s].Shape, stamps[s].Origin, new int2(boxMin.x + x, boxMin.y + y));
-                    }
-                }
-            }
+            for (var s = 0; s < stamps.Length; s++)
+            for (var x = 0; x < w; x++)
+            for (var y = 0; y < h; y++)
+                back[x, y] += (int)InfluenceTestHarness.Contribution(stamps[s].Shape, stamps[s].Origin,
+                    new int2(boxMin.x + x, boxMin.y + y));
+
             return back;
         }
 
-        static int Spread(int[,] grid, int x, int y, int decay, int denom)
+        private static int Spread(int[,] grid, int x, int y, int decay, int denom)
         {
             if (x < 0 || y < 0 || x >= grid.GetLength(0) || y >= grid.GetLength(1)) return 0;
-            int v = grid[x, y];
+            var v = grid[x, y];
             if (v == 0) return 0;
-            int vp = v - (int)((long)v * decay / 1000);
+            var vp = v - (int)((long)v * decay / 1000);
             return vp == 0 ? 0 : vp / denom;
         }
 
         [Test]
         public void IntegratedStencil_SpreadsAcrossChunkBoundaries_IdenticalToOracle()
         {
-            int chunkPower = 4; // 16x16
+            var chunkPower = 4; // 16x16
             var spec = GridSpec.FromPowerOfTwo(chunkPower, uint.MaxValue);
-            
+
             var front = InfluenceField.Create(spec, Allocator.Persistent);
             var back = InfluenceField.Create(spec, Allocator.Persistent);
-            
+
             // Central stamp that borders chunk edge
-            var initialStamps = new Stamp[]
+            var initialStamps = new[]
             {
-                new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(2, 2), 1000), new int2(15, 15)) // straddles chunk 0,0 and 1,1
+                new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(2, 2), 1000),
+                    new int2(15, 15)) // straddles chunk 0,0 and 1,1
             };
-            
+
             // Box enclosing area we care about: 4x4 chunks = 64x64 cells
-            int2 boxMin = new int2(-16, -16);
-            int2 boxSize = new int2(64, 64);
-            
-            int[,] oracleGrid = new int[boxSize.x, boxSize.y];
-            
-            int steps = 10;
-            int decay = 30;
-            int spreadDenom = 5;
+            var boxMin = new int2(-16, -16);
+            var boxSize = new int2(64, 64);
+
+            var oracleGrid = new int[boxSize.x, boxSize.y];
+
+            var steps = 10;
+            var decay = 30;
+            var spreadDenom = 5;
 
             var array = new NativeArray<Stamp>(initialStamps, Allocator.TempJob);
             front.Schedule(array, default).Complete();
             array.Dispose();
-            
+
             oracleGrid = StepOracle(oracleGrid, initialStamps, boxMin, decay, spreadDenom);
 
-            for (int step = 0; step < steps; step++)
+            for (var step = 0; step < steps; step++)
             {
                 // Verify Front == Oracle before step
                 var reader = front.AsReader();
-                for (int x = 0; x < boxSize.x; x++)
+                for (var x = 0; x < boxSize.x; x++)
+                for (var y = 0; y < boxSize.y; y++)
                 {
-                    for (int y = 0; y < boxSize.y; y++)
-                    {
-                        int2 cell = new int2(boxMin.x + x, boxMin.y + y);
-                        int actual = reader.ReadCell(cell);
-                        int expected = oracleGrid[x, y];
-                        Assert.AreEqual(expected, actual, $"Mismatch at step {step}, cell {cell}");
-                    }
+                    var cell = new int2(boxMin.x + x, boxMin.y + y);
+                    var actual = reader.ReadCell(cell);
+                    var expected = oracleGrid[x, y];
+                    Assert.AreEqual(expected, actual, $"Mismatch at step {step}, cell {cell}");
                 }
-                
+
                 // Advance
                 var stencil = new InfluenceField.StencilConfig
                 {
@@ -119,9 +110,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                 var emptyStamps = new NativeArray<Stamp>(0, Allocator.TempJob);
                 back.Schedule(emptyStamps, default, stencil).Complete();
                 emptyStamps.Dispose();
-                
+
                 oracleGrid = StepOracle(oracleGrid, new Stamp[0], boxMin, decay, spreadDenom);
-                
+
                 // Swap
                 var temp = front;
                 front = back;

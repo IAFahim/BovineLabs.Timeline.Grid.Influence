@@ -33,46 +33,37 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public void Execute()
         {
             if (ResetFrame)
-            {
-                for (int i = 0; i < LastWrittenBySlot.Length; i++)
-                {
+                for (var i = 0; i < LastWrittenBySlot.Length; i++)
                     LastWrittenBySlot[i] = 0;
-                }
-            }
 
             if (RetentionFrames != uint.MaxValue)
             {
-                uint minValidFrame = FrameId > RetentionFrames ? FrameId - RetentionFrames : 0;
-                for (int i = 0; i < LastWrittenBySlot.Length; i++)
-                {
+                var minValidFrame = FrameId > RetentionFrames ? FrameId - RetentionFrames : 0;
+                for (var i = 0; i < LastWrittenBySlot.Length; i++)
                     if (LastWrittenBySlot[i] != 0 && LastWrittenBySlot[i] < minValidFrame)
                     {
                         LastWrittenBySlot[i] = 0;
                         FreeSlots.Add(i);
                         SlotByCoord.Remove(CoordBySlot[i]);
                     }
-                }
             }
 
             if (FrameId % 60 == 0 && FreeSlots.Length > 0)
             {
-                int highestSlot = CoordBySlot.Length - 1;
-                for (int i = 0; i < FreeSlots.Length; i++)
+                var highestSlot = CoordBySlot.Length - 1;
+                for (var i = 0; i < FreeSlots.Length; i++)
                 {
-                    while (highestSlot >= 0 && LastWrittenBySlot[highestSlot] == 0)
-                    {
-                        highestSlot--;
-                    }
+                    while (highestSlot >= 0 && LastWrittenBySlot[highestSlot] == 0) highestSlot--;
 
-                    int freeSlot = FreeSlots[i];
+                    var freeSlot = FreeSlots[i];
                     if (freeSlot >= highestSlot) continue;
 
-                    int elements = Spec.ElementsPerChunk;
-                    void* dst = (int*)Data.GetUnsafePtr() + freeSlot * elements;
-                    void* src = (int*)Data.GetUnsafePtr() + highestSlot * elements;
+                    var elements = Spec.ElementsPerChunk;
+                    void* dst = Data.GetUnsafePtr() + freeSlot * elements;
+                    void* src = Data.GetUnsafePtr() + highestSlot * elements;
                     UnsafeUtility.MemCpy(dst, src, elements * sizeof(int));
 
-                    int2 coord = CoordBySlot[highestSlot];
+                    var coord = CoordBySlot[highestSlot];
                     CoordBySlot[freeSlot] = coord;
                     LastWrittenBySlot[freeSlot] = LastWrittenBySlot[highestSlot];
                     SlotByCoord.Add(coord, freeSlot);
@@ -81,7 +72,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     highestSlot--;
                 }
 
-                int newCount = highestSlot + 1;
+                var newCount = highestSlot + 1;
                 if (newCount < CoordBySlot.Length)
                 {
                     CoordBySlot.Length = newCount;
@@ -90,21 +81,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 }
 
                 FreeSlots.Clear();
-                for (int slot = 0; slot < newCount; slot++)
-                {
+                for (var slot = 0; slot < newCount; slot++)
                     if (LastWrittenBySlot[slot] == 0)
-                    {
                         FreeSlots.Add(slot);
-                    }
-                }
             }
 
             ActiveSlots.Clear();
 
-            if (HasStencil)
-            {
-                ActivateStencilFrontier();
-            }
+            if (HasStencil) ActivateStencilFrontier();
         }
 
         public void ProcessStamps(NativeArray<Stamp> resolved)
@@ -114,10 +98,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
             long running = 0;
             Offsets.Length = resolved.Length + 1;
-            for (int i = 0; i < resolved.Length; i++)
+            for (var i = 0; i < resolved.Length; i++)
             {
                 Offsets[i] = IntegerMath.ClampToInt(running);
-                InfluenceShape shape = resolved[i].Shape;
+                var shape = resolved[i].Shape;
                 running += Rasterizer.EstimateSpanCount(shape);
                 ActivateBounds(Rasterizer.Bounds(shape, resolved[i].Origin));
             }
@@ -126,19 +110,19 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             Spans.Length = Offsets[resolved.Length];
         }
 
-        void ActivateStencilFrontier()
+        private void ActivateStencilFrontier()
         {
-            int chunkSize = Spec.ChunkSize;
-            int stride = Spec.Stride;
-            int elements = Spec.ElementsPerChunk;
+            var chunkSize = Spec.ChunkSize;
+            var stride = Spec.Stride;
+            var elements = Spec.ElementsPerChunk;
 
-            for (int i = 0; i < StencilActiveSlots.Length; i++)
+            for (var i = 0; i < StencilActiveSlots.Length; i++)
             {
-                int slot = StencilActiveSlots[i];
-                int2 coord = StencilCoordBySlot[slot];
+                var slot = StencilActiveSlots[i];
+                var coord = StencilCoordBySlot[slot];
                 Activate(coord);
 
-                int baseIndex = slot * elements;
+                var baseIndex = slot * elements;
 
                 if (NeedsActivationEdge(baseIndex, 0, 0, 0, 1, chunkSize, stride))
                     Activate(coord + new int2(-1, 0));
@@ -154,48 +138,45 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             }
         }
 
-        bool NeedsActivationEdge(int baseIndex, int startX, int startY, int dx, int dy, int count, int stride)
+        private bool NeedsActivationEdge(int baseIndex, int startX, int startY, int dx, int dy, int count, int stride)
         {
-            for (int i = 0; i < count; i++)
+            for (var i = 0; i < count; i++)
             {
-                int x = startX + i * dx;
-                int y = startY + i * dy;
-                int v = StencilData[baseIndex + y * stride + x];
+                var x = startX + i * dx;
+                var y = startY + i * dy;
+                var v = StencilData[baseIndex + y * stride + x];
                 if (v != 0)
                 {
-                    int vp = v - (int)((long)v * DecayPerMille / 1000);
+                    var vp = v - (int)((long)v * DecayPerMille / 1000);
                     if (vp / SpreadDenominator != 0) return true;
                 }
             }
+
             return false;
         }
 
-        void ActivateBounds(in CellRect bounds)
+        private void ActivateBounds(in CellRect bounds)
         {
             if (bounds.IsEmpty) return;
-            ChunkRange chunks = ChunkMath.ChunkRangeOf(bounds, Spec.Log2);
+            var chunks = ChunkMath.ChunkRangeOf(bounds, Spec.Log2);
 
-            for (int cy = chunks.Min.y; cy <= chunks.Max.y; cy++)
-            {
-                for (int cx = chunks.Min.x; cx <= chunks.Max.x; cx++)
-                {
-                    Activate(new int2(cx, cy));
-                }
-            }
+            for (var cy = chunks.Min.y; cy <= chunks.Max.y; cy++)
+            for (var cx = chunks.Min.x; cx <= chunks.Max.x; cx++)
+                Activate(new int2(cx, cy));
         }
 
-        void Activate(int2 coord)
+        private void Activate(int2 coord)
         {
-            int slot = EnsureSlot(coord);
+            var slot = EnsureSlot(coord);
             if (LastWrittenBySlot[slot] == FrameId) return;
 
             LastWrittenBySlot[slot] = FrameId;
             ActiveSlots.Add(slot);
         }
 
-        int EnsureSlot(int2 coord)
+        private int EnsureSlot(int2 coord)
         {
-            if (SlotByCoord.TryGetValue(coord, out int existing)) return existing;
+            if (SlotByCoord.TryGetValue(coord, out var existing)) return existing;
 
             int slot;
             if (FreeSlots.Length > 0)
@@ -235,10 +216,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             if (StampsMap.TryGetFirstValue(SlotIndex, out var stamp, out var it))
             {
                 ExtractedStamps.Add(stamp);
-                while (StampsMap.TryGetNextValue(out stamp, ref it))
-                {
-                    ExtractedStamps.Add(stamp);
-                }
+                while (StampsMap.TryGetNextValue(out stamp, ref it)) ExtractedStamps.Add(stamp);
             }
 
             Helper.ProcessStamps(ExtractedStamps.AsArray());

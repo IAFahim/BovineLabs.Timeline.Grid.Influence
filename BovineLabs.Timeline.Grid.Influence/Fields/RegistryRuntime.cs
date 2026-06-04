@@ -1,7 +1,7 @@
+using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
-using BovineLabs.Timeline.Grid.Influence.Data;
 
 namespace BovineLabs.Timeline.Grid.Influence.Fields
 {
@@ -36,7 +36,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
             registry.Initialize(configs.Length, Allocator.Persistent);
 
             foreach (var config in configs)
-            {
                 registry.Register(new FieldConfig
                 {
                     Key = config.Key,
@@ -48,7 +47,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
                     SpreadDenominator = config.SpreadDenominator,
                     StrideAlignment = config.StrideAlignment
                 }, Allocator.Persistent);
-            }
 
             var e = state.EntityManager.CreateEntity();
             state.EntityManager.AddComponentData(e, new FieldRegistrySingleton
@@ -75,20 +73,17 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
             ref var reg = ref singleton.Registry;
             var stampsMap = singleton.PendingStamps;
 
-            JobHandle combinedWriters = state.Dependency;
-            for (int i = 0; i < reg.Count; i++)
-            {
+            var combinedWriters = state.Dependency;
+            for (var i = 0; i < reg.Count; i++)
                 combinedWriters = JobHandle.CombineDependencies(combinedWriters, reg.Slot(i).WriterDependency);
-            }
             combinedWriters.Complete();
 
             JobHandle combined = default;
-            for (int i = 0; i < reg.Count; i++)
+            for (var i = 0; i < reg.Count; i++)
             {
                 ref var pair = ref reg.Slot(i);
 
                 if (pair.DoubleBuffered && pair.Config.DecayPerMille > 0)
-                {
                     pair.PendingStencil = new InfluenceField.StencilConfig
                     {
                         IsActive = true,
@@ -99,7 +94,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
                         DecayPerMille = pair.Config.DecayPerMille,
                         SpreadDenominator = pair.Config.SpreadDenominator
                     };
-                }
 
                 JobHandle h;
                 if (pair.DoubleBuffered)

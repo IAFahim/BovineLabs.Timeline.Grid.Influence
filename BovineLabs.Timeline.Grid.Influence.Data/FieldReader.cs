@@ -7,11 +7,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 {
     public unsafe struct FieldReader
     {
-        [ReadOnly] NativeFlatMap.ReadOnly _slotByCoord;
-        [ReadOnly] NativeArray<uint> _lastWrittenBySlot;
-        [ReadOnly] NativeArray<int> _data;
-        GridSpec _spec;
-        uint _frameId;
+        [ReadOnly] private readonly NativeFlatMap.ReadOnly _slotByCoord;
+        [ReadOnly] private NativeArray<uint> _lastWrittenBySlot;
+        [ReadOnly] private NativeArray<int> _data;
+        private readonly GridSpec _spec;
+        private readonly uint _frameId;
 
         internal FieldReader(
             NativeFlatMap.ReadOnly slotByCoord,
@@ -30,17 +30,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadCell(int2 cell)
         {
-            int2 coord = ChunkMath.ChunkCoordOf(cell, _spec.Log2);
-            if (!_slotByCoord.TryGetValue(coord, out int slot) || _lastWrittenBySlot[slot] != _frameId)
-            {
-                return 0;
-            }
+            var coord = ChunkMath.ChunkCoordOf(cell, _spec.Log2);
+            if (!_slotByCoord.TryGetValue(coord, out var slot) || _lastWrittenBySlot[slot] != _frameId) return 0;
 
-            int2 local = ChunkMath.LocalOf(cell, ChunkMath.ChunkBaseOf(coord, _spec.Log2));
-            if (!ChunkMath.ContainsLocal(local, _spec.ChunkSize))
-            {
-                return 0;
-            }
+            var local = ChunkMath.LocalOf(cell, ChunkMath.ChunkBaseOf(coord, _spec.Log2));
+            if (!ChunkMath.ContainsLocal(local, _spec.ChunkSize)) return 0;
 
             return _data[ChunkMath.DataIndex(slot, local.x, local.y, _spec)];
         }
@@ -48,23 +42,24 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool TryGetChunk(int2 coord, out ChunkView view)
         {
-            if (!_slotByCoord.TryGetValue(coord, out int slot) || _lastWrittenBySlot[slot] != _frameId)
+            if (!_slotByCoord.TryGetValue(coord, out var slot) || _lastWrittenBySlot[slot] != _frameId)
             {
                 view = default;
                 return false;
             }
 
-            view = new ChunkView((int*)_data.GetUnsafeReadOnlyPtr() + slot * _spec.ElementsPerChunk, ChunkMath.ChunkBaseOf(coord, _spec.Log2), _spec);
+            view = new ChunkView((int*)_data.GetUnsafeReadOnlyPtr() + slot * _spec.ElementsPerChunk,
+                ChunkMath.ChunkBaseOf(coord, _spec.Log2), _spec);
             return true;
         }
     }
 
     public unsafe struct ChunkView
     {
-        [NativeDisableUnsafePtrRestriction] readonly int* _field;
-        readonly int2 _base;
-        readonly int _stride;
-        readonly int _chunkSize;
+        [NativeDisableUnsafePtrRestriction] private readonly int* _field;
+        private readonly int2 _base;
+        private readonly int _stride;
+        private readonly int _chunkSize;
 
         internal ChunkView(int* field, int2 chunkBase, in GridSpec spec)
         {
@@ -79,15 +74,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadLocal(int2 local)
         {
-            if (!ChunkMath.ContainsLocal(local, _chunkSize))
-            {
-                return 0;
-            }
+            if (!ChunkMath.ContainsLocal(local, _chunkSize)) return 0;
 
             return _field[local.y * _stride + local.x];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int ReadWorld(int2 cell) => ReadLocal(cell - _base);
+        public int ReadWorld(int2 cell)
+        {
+            return ReadLocal(cell - _base);
+        }
     }
 }

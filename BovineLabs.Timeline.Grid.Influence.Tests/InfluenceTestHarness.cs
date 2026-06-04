@@ -17,13 +17,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 
             var reader = field.AsReader();
             var grid = new int[boxSize.x, boxSize.y];
-            for (int x = 0; x < boxSize.x; x++)
-            {
-                for (int y = 0; y < boxSize.y; y++)
-                {
-                    grid[x, y] = reader.ReadCell(new int2(boxMin.x + x, boxMin.y + y));
-                }
-            }
+            for (var x = 0; x < boxSize.x; x++)
+            for (var y = 0; y < boxSize.y; y++)
+                grid[x, y] = reader.ReadCell(new int2(boxMin.x + x, boxMin.y + y));
 
             array.Dispose();
             field.Dispose();
@@ -33,19 +29,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         internal static long[,] Oracle(Stamp[] stamps, int2 boxMin, int2 boxSize)
         {
             var grid = new long[boxSize.x, boxSize.y];
-            for (int x = 0; x < boxSize.x; x++)
+            for (var x = 0; x < boxSize.x; x++)
+            for (var y = 0; y < boxSize.y; y++)
             {
-                for (int y = 0; y < boxSize.y; y++)
-                {
-                    int2 cell = new int2(boxMin.x + x, boxMin.y + y);
-                    long value = 0;
-                    for (int s = 0; s < stamps.Length; s++)
-                    {
-                        value += Contribution(stamps[s].Shape, stamps[s].Origin, cell);
-                    }
+                var cell = new int2(boxMin.x + x, boxMin.y + y);
+                long value = 0;
+                for (var s = 0; s < stamps.Length; s++) value += Contribution(stamps[s].Shape, stamps[s].Origin, cell);
 
-                    grid[x, y] = value;
-                }
+                grid[x, y] = value;
             }
 
             return grid;
@@ -53,17 +44,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 
         internal static (int2 Min, int2 Size) PaddedBox(Stamp[] stamps, in GridSpec spec, int extraCells)
         {
-            bool any = false;
-            int2 min = int2.zero;
-            int2 max = new int2(1, 1);
+            var any = false;
+            var min = int2.zero;
+            var max = new int2(1, 1);
 
-            for (int i = 0; i < stamps.Length; i++)
+            for (var i = 0; i < stamps.Length; i++)
             {
-                CellRect bounds = Rasterizer.Bounds(stamps[i].Shape, stamps[i].Origin);
-                if (bounds.IsEmpty)
-                {
-                    continue;
-                }
+                var bounds = Rasterizer.Bounds(stamps[i].Shape, stamps[i].Origin);
+                if (bounds.IsEmpty) continue;
 
                 if (!any)
                 {
@@ -78,7 +66,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                 }
             }
 
-            int pad = spec.ChunkSize + extraCells;
+            var pad = spec.ChunkSize + extraCells;
             min -= pad;
             max += pad;
             return (min, max - min);
@@ -93,44 +81,36 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 
                 case ShapeKind.RectShell:
                 {
-                    if (shape.ShellSize.x <= 0 || shape.ShellSize.y <= 0 || shape.ShellThickness <= 0)
-                    {
-                        return 0;
-                    }
+                    if (shape.ShellSize.x <= 0 || shape.ShellSize.y <= 0 || shape.ShellThickness <= 0) return 0;
 
                     long value = InRect(origin + shape.ShellMin, shape.ShellSize, cell) ? shape.Weight : 0;
-                    int2 innerMin = origin + shape.ShellMin + new int2(shape.ShellThickness, shape.ShellThickness);
-                    int2 innerSize = shape.ShellSize - new int2(2 * shape.ShellThickness, 2 * shape.ShellThickness);
-                    if (InRect(innerMin, innerSize, cell))
-                    {
-                        value -= shape.Weight;
-                    }
+                    var innerMin = origin + shape.ShellMin + new int2(shape.ShellThickness, shape.ShellThickness);
+                    var innerSize = shape.ShellSize - new int2(2 * shape.ShellThickness, 2 * shape.ShellThickness);
+                    if (InRect(innerMin, innerSize, cell)) value -= shape.Weight;
 
                     return value;
                 }
 
                 case ShapeKind.Disc:
-                    return shape.DiscRadius >= 0 && InDisc(origin + shape.DiscCenter, shape.DiscRadius, cell) ? shape.Weight : 0;
+                    return shape.DiscRadius >= 0 && InDisc(origin + shape.DiscCenter, shape.DiscRadius, cell)
+                        ? shape.Weight
+                        : 0;
 
                 case ShapeKind.Annulus:
                 {
-                    if (shape.AnnulusOuterRadius < 0 || shape.AnnulusInnerRadius >= shape.AnnulusOuterRadius)
-                    {
-                        return 0;
-                    }
+                    if (shape.AnnulusOuterRadius < 0 || shape.AnnulusInnerRadius >= shape.AnnulusOuterRadius) return 0;
 
-                    int2 center = origin + shape.AnnulusCenter;
+                    var center = origin + shape.AnnulusCenter;
                     long value = InDisc(center, shape.AnnulusOuterRadius, cell) ? shape.Weight : 0;
                     if (shape.AnnulusInnerRadius >= 0 && InDisc(center, shape.AnnulusInnerRadius, cell))
-                    {
                         value -= shape.Weight;
-                    }
 
                     return value;
                 }
 
                 case ShapeKind.Capsule:
-                    return shape.CapsuleRadius >= 0 && CapsuleContains(origin + shape.CapsuleStart, origin + shape.CapsuleEnd, shape.CapsuleRadius, cell)
+                    return shape.CapsuleRadius >= 0 && CapsuleContains(origin + shape.CapsuleStart,
+                        origin + shape.CapsuleEnd, shape.CapsuleRadius, cell)
                         ? shape.Weight
                         : 0;
 
@@ -140,13 +120,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                         : 0;
 
                 case ShapeKind.RoundedRect:
-                    return InRoundedRect(origin + shape.RoundedRectMin, shape.RoundedRectSize, shape.RoundedRectRadius, cell)
+                    return InRoundedRect(origin + shape.RoundedRectMin, shape.RoundedRectSize, shape.RoundedRectRadius,
+                        cell)
                         ? shape.Weight
                         : 0;
 
                 case ShapeKind.ThickLine:
                     return shape.ThickLineRadius >= 0 &&
-                           CapsuleContains(origin + shape.ThickLineStart, origin + shape.ThickLineEnd, shape.ThickLineRadius, cell)
+                           CapsuleContains(origin + shape.ThickLineStart, origin + shape.ThickLineEnd,
+                               shape.ThickLineRadius, cell)
                         ? shape.Weight
                         : 0;
 
@@ -156,9 +138,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         }
 
         internal static bool InRect(int2 min, int2 size, int2 cell)
-            => size.x > 0 && size.y > 0 &&
-               cell.x >= min.x && cell.x < min.x + size.x &&
-               cell.y >= min.y && cell.y < min.y + size.y;
+        {
+            return size.x > 0 && size.y > 0 &&
+                   cell.x >= min.x && cell.x < min.x + size.x &&
+                   cell.y >= min.y && cell.y < min.y + size.y;
+        }
 
         internal static bool InDisc(int2 center, int radius, int2 cell)
         {
@@ -169,57 +153,39 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 
         internal static bool InEllipse(int2 center, int2 radii, int2 cell)
         {
-            if (radii.x < 0 || radii.y < 0)
-            {
-                return false;
-            }
+            if (radii.x < 0 || radii.y < 0) return false;
 
-            int dx = cell.x - center.x;
-            int dy = cell.y - center.y;
+            var dx = cell.x - center.x;
+            var dy = cell.y - center.y;
 
-            if (radii.x == 0 && radii.y == 0)
-            {
-                return dx == 0 && dy == 0;
-            }
+            if (radii.x == 0 && radii.y == 0) return dx == 0 && dy == 0;
 
-            if (radii.x == 0)
-            {
-                return dx == 0 && math.abs(dy) <= radii.y;
-            }
+            if (radii.x == 0) return dx == 0 && math.abs(dy) <= radii.y;
 
-            if (radii.y == 0)
-            {
-                return dy == 0 && math.abs(dx) <= radii.x;
-            }
+            if (radii.y == 0) return dy == 0 && math.abs(dx) <= radii.x;
 
-            BigInteger rx2 = (BigInteger)radii.x * radii.x;
-            BigInteger ry2 = (BigInteger)radii.y * radii.y;
-            BigInteger dx2 = (BigInteger)dx * dx;
-            BigInteger dy2 = (BigInteger)dy * dy;
+            var rx2 = (BigInteger)radii.x * radii.x;
+            var ry2 = (BigInteger)radii.y * radii.y;
+            var dx2 = (BigInteger)dx * dx;
+            var dy2 = (BigInteger)dy * dy;
 
             return dx2 * ry2 + dy2 * rx2 <= rx2 * ry2;
         }
 
         internal static bool InRoundedRect(int2 min, int2 size, int radius, int2 cell)
         {
-            if (size.x <= 0 || size.y <= 0 || radius < 0 || !InRect(min, size, cell))
-            {
-                return false;
-            }
+            if (size.x <= 0 || size.y <= 0 || radius < 0 || !InRect(min, size, cell)) return false;
 
-            int maxRadius = (math.min(size.x, size.y) - 1) >> 1;
-            int r = math.min(radius, maxRadius);
+            var maxRadius = (math.min(size.x, size.y) - 1) >> 1;
+            var r = math.min(radius, maxRadius);
 
-            if (r <= 0)
-            {
-                return true;
-            }
+            if (r <= 0) return true;
 
-            int maxX = min.x + size.x - 1;
-            int maxY = min.y + size.y - 1;
+            var maxX = min.x + size.x - 1;
+            var maxY = min.y + size.y - 1;
 
-            int cx = math.clamp(cell.x, min.x + r, maxX - r);
-            int cy = math.clamp(cell.y, min.y + r, maxY - r);
+            var cx = math.clamp(cell.x, min.x + r, maxX - r);
+            var cy = math.clamp(cell.y, min.y + r, maxY - r);
 
             long dx = cell.x - cx;
             long dy = cell.y - cy;
@@ -229,30 +195,24 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 
         internal static bool CapsuleContains(int2 a, int2 b, int radius, int2 p)
         {
-            if (radius < 0)
-            {
-                return false;
-            }
+            if (radius < 0) return false;
 
-            BigInteger abx = (BigInteger)b.x - a.x;
-            BigInteger aby = (BigInteger)b.y - a.y;
-            BigInteger apx = (BigInteger)p.x - a.x;
-            BigInteger apy = (BigInteger)p.y - a.y;
+            var abx = (BigInteger)b.x - a.x;
+            var aby = (BigInteger)b.y - a.y;
+            var apx = (BigInteger)p.x - a.x;
+            var apy = (BigInteger)p.y - a.y;
 
-            BigInteger axisLengthSquared = abx * abx + aby * aby;
-            BigInteger radiusSquared = (BigInteger)radius * radius;
-            BigInteger projection = apx * abx + apy * aby;
-            BigInteger distanceToStart = apx * apx + apy * apy;
+            var axisLengthSquared = abx * abx + aby * aby;
+            var radiusSquared = (BigInteger)radius * radius;
+            var projection = apx * abx + apy * aby;
+            var distanceToStart = apx * apx + apy * apy;
 
-            if (axisLengthSquared.IsZero || projection.Sign <= 0)
-            {
-                return distanceToStart <= radiusSquared;
-            }
+            if (axisLengthSquared.IsZero || projection.Sign <= 0) return distanceToStart <= radiusSquared;
 
             if (projection >= axisLengthSquared)
             {
-                BigInteger bpx = (BigInteger)p.x - b.x;
-                BigInteger bpy = (BigInteger)p.y - b.y;
+                var bpx = (BigInteger)p.x - b.x;
+                var bpy = (BigInteger)p.y - b.y;
                 return bpx * bpx + bpy * bpy <= radiusSquared;
             }
 
@@ -267,10 +227,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             count = sink.Count;
 
             var managed = new WeightedRect[count];
-            for (int i = 0; i < count; i++)
-            {
-                managed[i] = buffer[i];
-            }
+            for (var i = 0; i < count; i++) managed[i] = buffer[i];
 
             buffer.Dispose();
             return managed;
@@ -278,12 +235,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 
         internal static Stamp RandomStamp(ref Random rng)
         {
-            int2 origin = rng.NextInt2(new int2(-30, -30), new int2(31, 31));
-            int weight = rng.NextInt(-5, 6);
-            if (weight == 0)
-            {
-                weight = 1;
-            }
+            var origin = rng.NextInt2(new int2(-30, -30), new int2(31, 31));
+            var weight = rng.NextInt(-5, 6);
+            if (weight == 0) weight = 1;
 
             switch (rng.NextInt(0, 8))
             {
@@ -295,8 +249,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 
                 case 1:
                 {
-                    int2 size = rng.NextInt2(new int2(2, 2), new int2(16, 16));
-                    int thickness = rng.NextInt(1, math.max(2, math.min(size.x, size.y)));
+                    var size = rng.NextInt2(new int2(2, 2), new int2(16, 16));
+                    var thickness = rng.NextInt(1, math.max(2, math.min(size.x, size.y)));
                     return new Stamp(InfluenceShape.RectShell(
                         rng.NextInt2(new int2(-10, -10), new int2(11, 11)), size, thickness, weight), origin);
                 }
@@ -307,8 +261,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 
                 case 3:
                 {
-                    int outer = rng.NextInt(1, 12);
-                    int inner = rng.NextInt(-1, outer);
+                    var outer = rng.NextInt(1, 12);
+                    var inner = rng.NextInt(-1, outer);
                     return new Stamp(InfluenceShape.Annulus(
                         rng.NextInt2(new int2(-8, -8), new int2(9, 9)), outer, inner, weight), origin);
                 }
@@ -348,6 +302,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         }
 
         internal static T GetPrivate<T>(in InfluenceField field, string name)
-            => (T)typeof(InfluenceField).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(field);
+        {
+            return (T)typeof(InfluenceField).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)
+                .GetValue(field);
+        }
     }
 }

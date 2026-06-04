@@ -1,7 +1,6 @@
 using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.Entities;
 using Unity.Jobs;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data
@@ -9,9 +8,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
     public readonly struct FieldId
     {
         public readonly int Value;
-        public FieldId(int v) { Value = v; }
+
+        public FieldId(int v)
+        {
+            Value = v;
+        }
+
         public bool IsValid => Value >= 0;
-        public static FieldId Invalid => new FieldId(-1);
+        public static FieldId Invalid => new(-1);
     }
 
     public struct FieldConfig
@@ -46,10 +50,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             if (!Pairs.IsCreated || Count >= Pairs.Length) return FieldId.Invalid;
 
-            int i = Count++;
+            var i = Count++;
             ref var pair = ref this.Slot(i);
 
-            int align = config.StrideAlignment == 0 ? 8 : config.StrideAlignment;
+            var align = config.StrideAlignment == 0 ? 8 : config.StrideAlignment;
             var spec = GridSpec.FromPowerOfTwo(config.ChunkPower, config.RetentionFrames, align);
 
             pair.Config = config;
@@ -62,17 +66,21 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             return new FieldId(i);
         }
 
-        public InfluenceField Front(FieldId id) => this.Slot(id.Value).Front;
+        public InfluenceField Front(FieldId id)
+        {
+            return this.Slot(id.Value).Front;
+        }
 
         public void Dispose()
         {
-            for (int i = 0; i < Count; i++)
+            for (var i = 0; i < Count; i++)
             {
                 ref var p = ref this.Slot(i);
                 p.WriterDependency.Complete();
                 if (p.Front.IsCreated) p.Front.Dispose();
                 if (p.DoubleBuffered && p.Back.IsCreated) p.Back.Dispose();
             }
+
             if (Pairs.IsCreated) Pairs.Dispose();
             if (KeyToSlot.IsCreated) KeyToSlot.Dispose();
             Count = 0;

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using NUnit.Framework;
 using Unity.Mathematics;
@@ -6,7 +7,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 {
     public class RasterizerOracleTests
     {
-        static readonly int[] ChunkPowers = { 1, 2, 3, 6 };
+        private static readonly int[] ChunkPowers = { 1, 2, 3, 6 };
 
         [Test]
         public void SingleDiscRadiusOneFormsExactPlus()
@@ -20,17 +21,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         [Test]
         public void SingleDiscRadiusTwoMatchesExactMembership()
         {
-            var expected = new System.Collections.Generic.List<int2>();
-            for (int y = -2; y <= 2; y++)
-            {
-                for (int x = -2; x <= 2; x++)
-                {
-                    if (x * x + y * y <= 4)
-                    {
-                        expected.Add(new int2(x, y));
-                    }
-                }
-            }
+            var expected = new List<int2>();
+            for (var y = -2; y <= 2; y++)
+            for (var x = -2; x <= 2; x++)
+                if (x * x + y * y <= 4)
+                    expected.Add(new int2(x, y));
 
             AssertExactNonZeroSet(new Stamp(InfluenceShape.Disc(int2.zero, 2, 1), int2.zero), expected.ToArray());
         }
@@ -44,9 +39,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             });
 
             var capsule = InfluenceTestHarness.Run(GridSpec.FromPowerOfTwo(3, uint.MaxValue),
-                new[] { new Stamp(InfluenceShape.Capsule(int2.zero, int2.zero, 3, 1), int2.zero) }, new int2(-5, -5), new int2(10, 10));
+                new[] { new Stamp(InfluenceShape.Capsule(int2.zero, int2.zero, 3, 1), int2.zero) }, new int2(-5, -5),
+                new int2(10, 10));
             var disc = InfluenceTestHarness.Run(GridSpec.FromPowerOfTwo(3, uint.MaxValue),
-                new[] { new Stamp(InfluenceShape.Disc(int2.zero, 3, 1), int2.zero) }, new int2(-5, -5), new int2(10, 10));
+                new[] { new Stamp(InfluenceShape.Disc(int2.zero, 3, 1), int2.zero) }, new int2(-5, -5),
+                new int2(10, 10));
 
             CollectionAssert.AreEqual(disc, capsule);
         }
@@ -54,12 +51,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         [Test]
         public void CapsuleIsSymmetricUnderEndpointSwap()
         {
-            for (int seed = 1; seed <= 64; seed++)
+            for (var seed = 1; seed <= 64; seed++)
             {
                 var rng = new Random((uint)seed);
-                int2 a = rng.NextInt2(new int2(-6, -6), new int2(7, 7));
-                int2 b = rng.NextInt2(new int2(-6, -6), new int2(7, 7));
-                int radius = rng.NextInt(0, 9);
+                var a = rng.NextInt2(new int2(-6, -6), new int2(7, 7));
+                var b = rng.NextInt2(new int2(-6, -6), new int2(7, 7));
+                var radius = rng.NextInt(0, 9);
                 var spec = GridSpec.FromPowerOfTwo(2, uint.MaxValue);
 
                 var forward = new[] { new Stamp(InfluenceShape.Capsule(a, b, radius, 3), int2.zero) };
@@ -76,23 +73,20 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         [Test]
         public void FuzzedScenesMatchOracleAcrossAllChunkSizes()
         {
-            for (int seed = 1; seed <= 300; seed++)
+            for (var seed = 1; seed <= 300; seed++)
             {
-                var rng = new Random((uint)(seed * 2654435761u | 1u));
-                int stampCount = rng.NextInt(1, 24);
+                var rng = new Random((uint)((seed * 2654435761u) | 1u));
+                var stampCount = rng.NextInt(1, 24);
                 var stamps = new Stamp[stampCount];
-                for (int i = 0; i < stampCount; i++)
-                {
-                    stamps[i] = InfluenceTestHarness.RandomStamp(ref rng);
-                }
+                for (var i = 0; i < stampCount; i++) stamps[i] = InfluenceTestHarness.RandomStamp(ref rng);
 
                 int[,] reference = null;
-                foreach (int power in ChunkPowers)
+                foreach (var power in ChunkPowers)
                 {
                     var spec = GridSpec.FromPowerOfTwo(power, uint.MaxValue);
                     var (min, size) = InfluenceTestHarness.PaddedBox(stamps, spec, 2);
-                    long[,] oracle = InfluenceTestHarness.Oracle(stamps, min, size);
-                    int[,] field = InfluenceTestHarness.Run(spec, stamps, min, size);
+                    var oracle = InfluenceTestHarness.Oracle(stamps, min, size);
+                    var field = InfluenceTestHarness.Run(spec, stamps, min, size);
 
                     AssertMatch(field, oracle, min, size, seed, power);
 
@@ -102,7 +96,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                     }
                     else
                     {
-                        var (refMin, refSize) = InfluenceTestHarness.PaddedBox(stamps, GridSpec.FromPowerOfTwo(ChunkPowers[0], uint.MaxValue), 2);
+                        var (refMin, refSize) = InfluenceTestHarness.PaddedBox(stamps,
+                            GridSpec.FromPowerOfTwo(ChunkPowers[0], uint.MaxValue), 2);
                         AssertChunkInvariance(reference, refMin, refSize, field, min, size, seed, power);
                     }
                 }
@@ -121,23 +116,18 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         [Test]
         public void RoundedRectRadiusOneRemovesOnlyCorners()
         {
-            var expected = new System.Collections.Generic.List<int2>();
+            var expected = new List<int2>();
 
-            for (int y = 0; y < 5; y++)
+            for (var y = 0; y < 5; y++)
+            for (var x = 0; x < 5; x++)
             {
-                for (int x = 0; x < 5; x++)
-                {
-                    bool corner =
-                        (x == 0 && y == 0) ||
-                        (x == 4 && y == 0) ||
-                        (x == 0 && y == 4) ||
-                        (x == 4 && y == 4);
+                var corner =
+                    (x == 0 && y == 0) ||
+                    (x == 4 && y == 0) ||
+                    (x == 0 && y == 4) ||
+                    (x == 4 && y == 4);
 
-                    if (!corner)
-                    {
-                        expected.Add(new int2(x, y));
-                    }
-                }
+                if (!corner) expected.Add(new int2(x, y));
             }
 
             AssertExactNonZeroSet(
@@ -148,12 +138,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         [Test]
         public void ThickLineMatchesCapsuleExactly()
         {
-            for (int seed = 1; seed <= 128; seed++)
+            for (var seed = 1; seed <= 128; seed++)
             {
-                var rng = new Random((uint)(seed * 1103515245u | 1u));
-                int2 a = rng.NextInt2(new int2(-8, -8), new int2(9, 9));
-                int2 b = rng.NextInt2(new int2(-8, -8), new int2(9, 9));
-                int radius = rng.NextInt(0, 8);
+                var rng = new Random((uint)((seed * 1103515245u) | 1u));
+                var a = rng.NextInt2(new int2(-8, -8), new int2(9, 9));
+                var b = rng.NextInt2(new int2(-8, -8), new int2(9, 9));
+                var radius = rng.NextInt(0, 8);
 
                 var spec = GridSpec.FromPowerOfTwo(3, uint.MaxValue);
                 var thickLine = new[] { new Stamp(InfluenceShape.ThickLine(a, b, radius, 2), int2.zero) };
@@ -168,59 +158,53 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             }
         }
 
-        static void AssertMatch(int[,] field, long[,] oracle, int2 min, int2 size, int seed, int power)
+        private static void AssertMatch(int[,] field, long[,] oracle, int2 min, int2 size, int seed, int power)
         {
-            for (int x = 0; x < size.x; x++)
+            for (var x = 0; x < size.x; x++)
+            for (var y = 0; y < size.y; y++)
             {
-                for (int y = 0; y < size.y; y++)
-                {
-                    long expected = oracle[x, y];
-                    Assert.That(expected, Is.InRange((long)int.MinValue, (long)int.MaxValue),
-                        $"Oracle exceeded int range seed {seed} power {power} cell ({min.x + x},{min.y + y})");
-                    Assert.AreEqual((int)expected, field[x, y],
-                        $"Mismatch seed {seed} power {power} cell ({min.x + x},{min.y + y})");
-                }
+                var expected = oracle[x, y];
+                Assert.That(expected, Is.InRange((long)int.MinValue, (long)int.MaxValue),
+                    $"Oracle exceeded int range seed {seed} power {power} cell ({min.x + x},{min.y + y})");
+                Assert.AreEqual((int)expected, field[x, y],
+                    $"Mismatch seed {seed} power {power} cell ({min.x + x},{min.y + y})");
             }
         }
 
-        static void AssertChunkInvariance(int[,] a, int2 aMin, int2 aSize, int[,] b, int2 bMin, int2 bSize, int seed, int power)
+        private static void AssertChunkInvariance(int[,] a, int2 aMin, int2 aSize, int[,] b, int2 bMin, int2 bSize,
+            int seed, int power)
         {
-            int2 lo = math.max(aMin, bMin);
-            int2 hi = math.min(aMin + aSize, bMin + bSize);
-            for (int cx = lo.x; cx < hi.x; cx++)
-            {
-                for (int cy = lo.y; cy < hi.y; cy++)
-                {
-                    Assert.AreEqual(a[cx - aMin.x, cy - aMin.y], b[cx - bMin.x, cy - bMin.y],
-                        $"Chunk-size divergence seed {seed} power {power} cell ({cx},{cy})");
-                }
-            }
+            var lo = math.max(aMin, bMin);
+            var hi = math.min(aMin + aSize, bMin + bSize);
+            for (var cx = lo.x; cx < hi.x; cx++)
+            for (var cy = lo.y; cy < hi.y; cy++)
+                Assert.AreEqual(a[cx - aMin.x, cy - aMin.y], b[cx - bMin.x, cy - bMin.y],
+                    $"Chunk-size divergence seed {seed} power {power} cell ({cx},{cy})");
         }
 
-        static void AssertExactNonZeroSet(Stamp stamp, int2[] expectedNonZero)
+        private static void AssertExactNonZeroSet(Stamp stamp, int2[] expectedNonZero)
         {
             var spec = GridSpec.FromPowerOfTwo(2, uint.MaxValue);
             var stamps = new[] { stamp };
             var (min, size) = InfluenceTestHarness.PaddedBox(stamps, spec, 2);
-            int[,] field = InfluenceTestHarness.Run(spec, stamps, min, size);
+            var field = InfluenceTestHarness.Run(spec, stamps, min, size);
 
-            var expected = new System.Collections.Generic.HashSet<int2>(expectedNonZero);
-            for (int x = 0; x < size.x; x++)
+            var expected = new HashSet<int2>(expectedNonZero);
+            for (var x = 0; x < size.x; x++)
+            for (var y = 0; y < size.y; y++)
             {
-                for (int y = 0; y < size.y; y++)
-                {
-                    int2 cell = new int2(min.x + x, min.y + y);
-                    bool shouldBeSet = expected.Contains(cell);
-                    Assert.AreEqual(shouldBeSet ? stamp.Shape.Weight : 0, field[x, y], $"cell ({cell.x},{cell.y})");
-                }
+                var cell = new int2(min.x + x, min.y + y);
+                var shouldBeSet = expected.Contains(cell);
+                Assert.AreEqual(shouldBeSet ? stamp.Shape.Weight : 0, field[x, y], $"cell ({cell.x},{cell.y})");
             }
         }
 
-        static void AssertSceneMatchesOracleEverywhere(Stamp[] stamps)
+        private static void AssertSceneMatchesOracleEverywhere(Stamp[] stamps)
         {
             var spec = GridSpec.FromPowerOfTwo(3, uint.MaxValue);
             var (min, size) = InfluenceTestHarness.PaddedBox(stamps, spec, 2);
-            AssertMatch(InfluenceTestHarness.Run(spec, stamps, min, size), InfluenceTestHarness.Oracle(stamps, min, size), min, size, 0, 3);
+            AssertMatch(InfluenceTestHarness.Run(spec, stamps, min, size),
+                InfluenceTestHarness.Oracle(stamps, min, size), min, size, 0, 3);
         }
     }
 }

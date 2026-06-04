@@ -6,61 +6,74 @@ using UnityEngine;
 
 namespace BovineLabs.Timeline.Grid.Influence.Authoring
 {
-    [AutoRef(nameof(InfluenceGridSettingsAuthoring), nameof(InfluenceGridSettingsAuthoring.Stamps), "GridStamp", "Schemas/GridStamps")]
+    [AutoRef(nameof(InfluenceGridSettingsAuthoring), nameof(InfluenceGridSettingsAuthoring.Stamps), "GridStamp",
+        "Schemas/GridStamps")]
     [CreateAssetMenu(menuName = "BovineLabs/Grid/Stamp Schema")]
     public class GridStampSchemaObject : ScriptableObject, IUID
     {
-        [SerializeField]
-        [InspectorReadOnly]
-        private int id;
-
-        public ushort Id => (ushort)this.id;
-
-        int IUID.ID
-        {
-            get => this.id;
-            set => this.id = value;
-        }
+        [SerializeField] [InspectorReadOnly] private int id;
 
         public ShapeKind Kind = ShapeKind.Disc;
         public int BaseWeight = 1;
 
-        [Header("Solid Rect / Rect Shell")]
-        public Vector2Int RectMin = new(-5, -5);
+        [Header("Solid Rect / Rect Shell")] public Vector2Int RectMin = new(-5, -5);
+
         public Vector2Int RectSize = new(10, 10);
         public int ShellThickness = 1;
 
-        [Header("Disc")]
-        public Vector2Int DiscCenter = Vector2Int.zero;
+        [Header("Disc")] public Vector2Int DiscCenter = Vector2Int.zero;
+
         public int DiscRadius = 5;
 
-        [Header("Annulus")]
-        public Vector2Int AnnulusCenter = Vector2Int.zero;
+        [Header("Annulus")] public Vector2Int AnnulusCenter = Vector2Int.zero;
+
         public int AnnulusOuterRadius = 5;
         public int AnnulusInnerRadius = 3;
 
-        [Header("Capsule")]
-        public Vector2Int CapsuleStart = new(-3, 0);
+        [Header("Capsule")] public Vector2Int CapsuleStart = new(-3, 0);
+
         public Vector2Int CapsuleEnd = new(3, 5);
         public int CapsuleRadius = 5;
 
-        [Header("Ellipse")]
-        public Vector2Int EllipseCenter = Vector2Int.zero;
+        [Header("Ellipse")] public Vector2Int EllipseCenter = Vector2Int.zero;
+
         public Vector2Int EllipseRadii = new(5, 3);
 
-        [Header("Rounded Rect")]
-        public Vector2Int RoundedRectMin = new(-5, -3);
+        [Header("Rounded Rect")] public Vector2Int RoundedRectMin = new(-5, -3);
+
         public Vector2Int RoundedRectSize = new(10, 6);
         public int RoundedRectRadius = 2;
 
-        [Header("Thick Line")]
-        public Vector2Int ThickLineStart = new(-5, 0);
+        [Header("Thick Line")] public Vector2Int ThickLineStart = new(-5, 0);
+
         public Vector2Int ThickLineEnd = new(5, 0);
         public int ThickLineRadius = 1;
 
+        public ushort Id => (ushort)id;
+
+        private void OnValidate()
+        {
+            RectSize = new Vector2Int(math.max(0, RectSize.x), math.max(0, RectSize.y));
+            ShellThickness = math.max(1, ShellThickness);
+            DiscRadius = math.max(0, DiscRadius);
+            AnnulusOuterRadius = math.max(0, AnnulusOuterRadius);
+            AnnulusInnerRadius = math.clamp(AnnulusInnerRadius, -1, AnnulusOuterRadius - 1);
+            CapsuleRadius = math.max(0, CapsuleRadius);
+            EllipseRadii = new Vector2Int(math.max(0, EllipseRadii.x), math.max(0, EllipseRadii.y));
+            RoundedRectSize = new Vector2Int(math.max(0, RoundedRectSize.x), math.max(0, RoundedRectSize.y));
+            RoundedRectRadius = math.max(0, RoundedRectRadius);
+            ThickLineRadius = math.max(0, ThickLineRadius);
+        }
+
+        int IUID.ID
+        {
+            get => id;
+            set => id = value;
+        }
+
         public InfluenceShape BuildShape(float weightMultiplier)
         {
-            int weight = (int)math.round(BaseWeight * weightMultiplier);
+            var weight = (int)math.round(BaseWeight * weightMultiplier);
 
             int2 rectMin = new(RectMin.x, RectMin.y);
             int2 rectSize = new(RectSize.x, RectSize.y);
@@ -80,27 +93,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 ShapeKind.SolidRect => InfluenceShape.SolidRect(rectMin, rectSize, weight),
                 ShapeKind.RectShell => InfluenceShape.RectShell(rectMin, rectSize, ShellThickness, weight),
                 ShapeKind.Disc => InfluenceShape.Disc(discCenter, DiscRadius, weight),
-                ShapeKind.Annulus => InfluenceShape.Annulus(annulusCenter, AnnulusOuterRadius, AnnulusInnerRadius, weight),
+                ShapeKind.Annulus => InfluenceShape.Annulus(annulusCenter, AnnulusOuterRadius, AnnulusInnerRadius,
+                    weight),
                 ShapeKind.Capsule => InfluenceShape.Capsule(capsuleStart, capsuleEnd, CapsuleRadius, weight),
                 ShapeKind.Ellipse => InfluenceShape.Ellipse(ellipseCenter, ellipseRadii, weight),
-                ShapeKind.RoundedRect => InfluenceShape.RoundedRect(roundedRectMin, roundedRectSize, RoundedRectRadius, weight),
+                ShapeKind.RoundedRect => InfluenceShape.RoundedRect(roundedRectMin, roundedRectSize, RoundedRectRadius,
+                    weight),
                 ShapeKind.ThickLine => InfluenceShape.ThickLine(thickLineStart, thickLineEnd, ThickLineRadius, weight),
                 _ => InfluenceShape.Disc(discCenter, DiscRadius, weight)
             };
-        }
-
-        void OnValidate()
-        {
-            RectSize = new Vector2Int(math.max(0, RectSize.x), math.max(0, RectSize.y));
-            ShellThickness = math.max(1, ShellThickness);
-            DiscRadius = math.max(0, DiscRadius);
-            AnnulusOuterRadius = math.max(0, AnnulusOuterRadius);
-            AnnulusInnerRadius = math.clamp(AnnulusInnerRadius, -1, AnnulusOuterRadius - 1);
-            CapsuleRadius = math.max(0, CapsuleRadius);
-            EllipseRadii = new Vector2Int(math.max(0, EllipseRadii.x), math.max(0, EllipseRadii.y));
-            RoundedRectSize = new Vector2Int(math.max(0, RoundedRectSize.x), math.max(0, RoundedRectSize.y));
-            RoundedRectRadius = math.max(0, RoundedRectRadius);
-            ThickLineRadius = math.max(0, ThickLineRadius);
         }
     }
 }

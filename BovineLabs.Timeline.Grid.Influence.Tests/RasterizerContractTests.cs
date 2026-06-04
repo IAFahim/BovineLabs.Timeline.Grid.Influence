@@ -9,14 +9,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         [Test]
         public void EstimateSpanCountIsAlwaysAnUpperBoundAndNeverDropsSpans()
         {
-            for (int seed = 1; seed <= 4000; seed++)
+            for (var seed = 1; seed <= 4000; seed++)
             {
-                var rng = new Random((uint)(seed * 747796405u | 1u));
-                Stamp stamp = InfluenceTestHarness.RandomStamp(ref rng);
-                int estimate = Rasterizer.EstimateSpanCount(stamp.Shape);
+                var rng = new Random((uint)((seed * 747796405u) | 1u));
+                var stamp = InfluenceTestHarness.RandomStamp(ref rng);
+                var estimate = Rasterizer.EstimateSpanCount(stamp.Shape);
 
-                InfluenceTestHarness.Emit(stamp, estimate, out int exactCapacityCount);
-                InfluenceTestHarness.Emit(stamp, estimate + 4096, out int generousCount);
+                InfluenceTestHarness.Emit(stamp, estimate, out var exactCapacityCount);
+                InfluenceTestHarness.Emit(stamp, estimate + 4096, out var generousCount);
 
                 Assert.LessOrEqual(generousCount, estimate,
                     $"Emit produced more spans than estimated seed {seed} kind {stamp.Shape.Kind}");
@@ -28,19 +28,16 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         [Test]
         public void EveryEmittedSpanIsContainedWithinBounds()
         {
-            for (int seed = 1; seed <= 4000; seed++)
+            for (var seed = 1; seed <= 4000; seed++)
             {
-                var rng = new Random((uint)(seed * 2246822519u | 1u));
-                Stamp stamp = InfluenceTestHarness.RandomStamp(ref rng);
-                CellRect bounds = Rasterizer.Bounds(stamp.Shape, stamp.Origin);
-                WeightedRect[] spans = InfluenceTestHarness.Emit(stamp, Rasterizer.EstimateSpanCount(stamp.Shape), out _);
+                var rng = new Random((uint)((seed * 2246822519u) | 1u));
+                var stamp = InfluenceTestHarness.RandomStamp(ref rng);
+                var bounds = Rasterizer.Bounds(stamp.Shape, stamp.Origin);
+                var spans = InfluenceTestHarness.Emit(stamp, Rasterizer.EstimateSpanCount(stamp.Shape), out _);
 
-                foreach (WeightedRect span in spans)
+                foreach (var span in spans)
                 {
-                    if (span.IsEmpty)
-                    {
-                        continue;
-                    }
+                    if (span.IsEmpty) continue;
 
                     Assert.IsFalse(bounds.IsEmpty, $"Non-empty span under empty bounds seed {seed}");
                     Assert.GreaterOrEqual(span.Bounds.Min.x, bounds.Min.x, $"span left seed {seed}");
@@ -68,16 +65,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                 new(InfluenceShape.RoundedRect(int2.zero, new int2(0, 5), 1, 1), int2.zero),
                 new(InfluenceShape.RoundedRect(int2.zero, new int2(5, 0), 1, 1), int2.zero),
                 new(InfluenceShape.RoundedRect(int2.zero, new int2(5, 5), -1, 1), int2.zero),
-                new(InfluenceShape.ThickLine(int2.zero, new int2(5, 0), -1, 1), int2.zero),
+                new(InfluenceShape.ThickLine(int2.zero, new int2(5, 0), -1, 1), int2.zero)
             };
 
-            foreach (Stamp stamp in degenerate)
+            foreach (var stamp in degenerate)
             {
-                InfluenceTestHarness.Emit(stamp, math.max(1, Rasterizer.EstimateSpanCount(stamp.Shape)), out int count);
-                foreach (WeightedRect span in InfluenceTestHarness.Emit(stamp, math.max(1, count), out _))
-                {
+                InfluenceTestHarness.Emit(stamp, math.max(1, Rasterizer.EstimateSpanCount(stamp.Shape)), out var count);
+                foreach (var span in InfluenceTestHarness.Emit(stamp, math.max(1, count), out _))
                     Assert.IsTrue(span.IsEmpty, $"Degenerate {stamp.Shape.Kind} emitted coverage");
-                }
             }
         }
 
@@ -87,15 +82,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             var stamps = new[] { new Stamp(InfluenceShape.RectShell(int2.zero, new int2(6, 6), 5, 1), int2.zero) };
             var spec = GridSpec.FromPowerOfTwo(3, uint.MaxValue);
             var (min, size) = InfluenceTestHarness.PaddedBox(stamps, spec, 2);
-            int[,] field = InfluenceTestHarness.Run(spec, stamps, min, size);
+            var field = InfluenceTestHarness.Run(spec, stamps, min, size);
 
-            for (int x = 0; x < 6; x++)
-            {
-                for (int y = 0; y < 6; y++)
-                {
-                    Assert.AreEqual(1, field[x - min.x, y - min.y], $"solid shell cell ({x},{y})");
-                }
-            }
+            for (var x = 0; x < 6; x++)
+            for (var y = 0; y < 6; y++)
+                Assert.AreEqual(1, field[x - min.x, y - min.y], $"solid shell cell ({x},{y})");
         }
     }
 }

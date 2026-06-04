@@ -19,8 +19,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Diffusion
         public int DecayPerMille;
     }
 
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(TimelineComponentAnimationGroup))]
+    [UpdateInGroup(typeof(BovineLabs.Timeline.TimelineSystemGroup))]
+    [UpdateAfter(typeof(BovineLabs.Timeline.TimelineComponentAnimationGroup))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
                        WorldSystemFilterFlags.ServerSimulation | WorldSystemFilterFlags.Editor)]
     public partial struct DiffusionFieldSystem : ISystem

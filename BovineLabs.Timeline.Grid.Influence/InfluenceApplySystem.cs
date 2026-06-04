@@ -10,8 +10,8 @@ using Unity.Transforms;
 namespace BovineLabs.Timeline.Grid.Influence
 {
     [DisableAutoCreation]
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(TimelineComponentAnimationGroup))]
+    [UpdateInGroup(typeof(BovineLabs.Timeline.TimelineSystemGroup))]
+    [UpdateAfter(typeof(BovineLabs.Timeline.TimelineComponentAnimationGroup))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation |
                        WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.Editor)]
     public partial struct InfluenceApplySystem : ISystem

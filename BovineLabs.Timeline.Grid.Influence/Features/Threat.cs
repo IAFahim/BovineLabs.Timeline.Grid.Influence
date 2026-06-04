@@ -14,8 +14,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Threat
     
     public struct ThreatField : IComponentData { public FieldId Id; }
 
-    [UpdateInGroup(typeof(SimulationSystemGroup))]
-    [UpdateAfter(typeof(TimelineComponentAnimationGroup))]
+    [UpdateInGroup(typeof(BovineLabs.Timeline.TimelineSystemGroup))]
+    [UpdateAfter(typeof(BovineLabs.Timeline.TimelineComponentAnimationGroup))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
                        WorldSystemFilterFlags.ServerSimulation | WorldSystemFilterFlags.Editor)]
     public partial struct ThreatFieldSystem : ISystem

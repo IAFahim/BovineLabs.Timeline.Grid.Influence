@@ -62,13 +62,24 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 _frameId);
         }
 
+        public struct StencilConfig
+        {
+            public bool IsActive;
+            public NativeArray<int> ActiveSlots;
+            public NativeArray<int2> CoordBySlot;
+            public NativeArray<int> Data;
+            public NativeFlatMap.ReadOnly SlotByCoord;
+            public int DecayPerMille;
+            public int SpreadDenominator;
+        }
+
         public int CompleteAndRead(int2 cell)
         {
             Complete();
             return AsReader().ReadCell(cell);
         }
 
-        public JobHandle Schedule(NativeArray<Stamp> stamps, JobHandle dependsOn)
+        public JobHandle Schedule(NativeArray<Stamp> stamps, JobHandle dependsOn, StencilConfig stencil = default)
         {
             ThrowIfNotCreated();
             JobHandle combined = JobHandle.CombineDependencies(_dependency, dependsOn);
@@ -91,6 +102,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 disposeStamps = true;
             }
 
+            bool disposeStencil = false;
+            if (!stencil.IsActive)
+            {
+                disposeStencil = true;
+                stencil.ActiveSlots = new NativeArray<int>(0, Allocator.TempJob);
+                stencil.CoordBySlot = new NativeArray<int2>(0, Allocator.TempJob);
+                stencil.Data = new NativeArray<int>(0, Allocator.TempJob);
+            }
+
             NativeList<int> offsets = new NativeList<int>(1, Allocator.TempJob);
             NativeList<WeightedRect> spans = new NativeList<WeightedRect>(1, Allocator.TempJob);
             NativeList<int> stampCount = new NativeList<int>(1, Allocator.TempJob);
@@ -110,7 +130,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 Spec = _spec,
                 FrameId = _frameId,
                 ResetFrame = resetFrame,
-                RetentionFrames = _spec.RetentionFrames
+                RetentionFrames = _spec.RetentionFrames,
+                HasStencil = stencil.IsActive,
+                StencilActiveSlots = stencil.ActiveSlots,
+                StencilCoordBySlot = stencil.CoordBySlot,
+                StencilData = stencil.Data,
+                DecayPerMille = stencil.DecayPerMille,
+                SpreadDenominator = stencil.SpreadDenominator
             }.Schedule(combined);
 
             JobHandle rasterize = new RasterizeJob
@@ -141,8 +167,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             JobHandle resolve = new ResolveJob
             {
                 ActiveSlots = _activeSlots.AsDeferredJobArray(),
+                CoordBySlot = _coordBySlot.AsDeferredJobArray(),
                 Data = _data.AsDeferredJobArray(),
-                Spec = _spec
+                Spec = _spec,
+                HasStencil = stencil.IsActive,
+                StencilData = stencil.Data,
+                StencilSlotByCoord = stencil.SlotByCoord,
+                DecayPerMille = stencil.DecayPerMille,
+                SpreadDenominator = stencil.SpreadDenominator
             }.Schedule(_activeSlots, 1, scatter);
 
             JobHandle cleanup = JobHandle.CombineDependencies(spans.Dispose(resolve), offsets.Dispose(resolve));
@@ -150,6 +182,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             if (disposeStamps)
             {
                 cleanup = stamps.Dispose(cleanup);
+            }
+            if (disposeStencil)
+            {
+                cleanup = stencil.ActiveSlots.Dispose(cleanup);
+                cleanup = stencil.CoordBySlot.Dispose(cleanup);
+                cleanup = stencil.Data.Dispose(cleanup);
             }
             _dependency = cleanup;
             return cleanup;
@@ -302,13 +340,107 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         struct ResolveJob : IJobParallelForDefer
         {
             [ReadOnly] public NativeArray<int> ActiveSlots;
+            [ReadOnly] public NativeArray<int2> CoordBySlot;
             [NativeDisableParallelForRestriction] public NativeArray<int> Data;
             public GridSpec Spec;
 
+            public bool HasStencil;
+            [ReadOnly] public NativeArray<int> StencilData;
+            public NativeFlatMap.ReadOnly StencilSlotByCoord;
+            public int DecayPerMille;
+            public int SpreadDenominator;
+
             public void Execute(int index)
             {
-                int* field = (int*)Data.GetUnsafePtr() + ActiveSlots[index] * Spec.ElementsPerChunk;
+                int slot = ActiveSlots[index];
+                int2 coord = CoordBySlot[slot];
+                int baseIndex = slot * Spec.ElementsPerChunk;
+                int* field = (int*)Data.GetUnsafePtr() + baseIndex;
+                
                 PrefixSum.Run(field, Spec);
+
+                if (HasStencil)
+                {
+                    ApplyStencil(coord, field);
+                }
+            }
+
+            void ApplyStencil(int2 coord, int* field)
+            {
+                int chunkSize = Spec.ChunkSize;
+                int stride = Spec.Stride;
+                
+                int stencilSelfBase = -1;
+                if (StencilSlotByCoord.TryGetValue(coord, out int stencilSelfSlot))
+                {
+                    stencilSelfBase = stencilSelfSlot * Spec.ElementsPerChunk;
+                }
+
+                int* stencilPtr = (int*)StencilData.GetUnsafeReadOnlyPtr();
+
+                for (int y = 0; y < chunkSize; y++)
+                {
+                    for (int x = 0; x < chunkSize; x++)
+                    {
+                        int self = 0;
+                        if (stencilSelfBase >= 0)
+                        {
+                            self = stencilPtr[stencilSelfBase + y * stride + x];
+                        }
+
+                        int incoming = 
+                            SpreadAt(coord, x - 1, y, stride, stencilPtr) +
+                            SpreadAt(coord, x + 1, y, stride, stencilPtr) +
+                            SpreadAt(coord, x, y - 1, stride, stencilPtr) +
+                            SpreadAt(coord, x, y + 1, stride, stencilPtr);
+
+                        int retained = 0;
+                        if (self != 0)
+                        {
+                            int vp = self - (int)((long)self * DecayPerMille / 1000);
+                            if (vp != 0)
+                            {
+                                int q = vp / SpreadDenominator;
+                                retained = vp - 4 * q;
+                            }
+                        }
+
+                        field[y * stride + x] += retained + incoming;
+                    }
+                }
+            }
+
+            int SpreadAt(int2 chunkCoord, int localX, int localY, int stride, int* stencilPtr)
+            {
+                int chunkSize = Spec.ChunkSize;
+                int2 coord = chunkCoord;
+
+                if ((uint)localX < (uint)chunkSize && (uint)localY < (uint)chunkSize)
+                {
+                    if (StencilSlotByCoord.TryGetValue(coord, out int s))
+                    {
+                        int v = stencilPtr[s * Spec.ElementsPerChunk + localY * stride + localX];
+                        if (v == 0) return 0;
+                        int vp = v - (int)((long)v * DecayPerMille / 1000);
+                        return vp == 0 ? 0 : vp / SpreadDenominator;
+                    }
+                    return 0;
+                }
+
+                if (localX < 0) { coord.x -= 1; localX += chunkSize; }
+                else if (localX >= chunkSize) { coord.x += 1; localX -= chunkSize; }
+
+                if (localY < 0) { coord.y -= 1; localY += chunkSize; }
+                else if (localY >= chunkSize) { coord.y += 1; localY -= chunkSize; }
+
+                if (StencilSlotByCoord.TryGetValue(coord, out int slot))
+                {
+                    int v = stencilPtr[slot * Spec.ElementsPerChunk + localY * stride + localX];
+                    if (v == 0) return 0;
+                    int vp = v - (int)((long)v * DecayPerMille / 1000);
+                    return vp == 0 ? 0 : vp / SpreadDenominator;
+                }
+                return 0;
             }
         }
     }

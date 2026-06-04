@@ -66,16 +66,17 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
                 
                 if (pair.DoubleBuffered)
                 {
-                    h = pair.Back.Schedule(stamps, default);
+                    h = pair.Back.Schedule(stamps, default, pair.PendingStencil);
                 }
                 else
                 {
-                    h = pair.Front.Schedule(stamps, default);
+                    h = pair.Front.Schedule(stamps, default, pair.PendingStencil);
                 }
                 
                 pair.Swap();
 
                 pair.PendingStamps = default;
+                pair.PendingStencil = default;
                 pair.WriterDependency = default;
 
                 combined = JobHandle.CombineDependencies(combined, h);

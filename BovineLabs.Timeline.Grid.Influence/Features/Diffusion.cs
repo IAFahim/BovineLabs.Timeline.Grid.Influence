@@ -19,8 +19,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Diffusion
         public int DecayPerMille;
     }
 
-    [UpdateInGroup(typeof(BovineLabs.Timeline.TimelineSystemGroup))]
-    [UpdateAfter(typeof(BovineLabs.Timeline.TimelineComponentAnimationGroup))]
+    [UpdateInGroup(typeof(TimelineSystemGroup))]
+    [UpdateAfter(typeof(TimelineComponentAnimationGroup))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
                        WorldSystemFilterFlags.ServerSimulation | WorldSystemFilterFlags.Editor)]
     public partial struct DiffusionFieldSystem : ISystem
@@ -57,39 +57,34 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Diffusion
 
             var config = SystemAPI.GetSingleton<DiffusionFieldConfig>();
             ref var pair = ref regSingleton.Registry.Slot(config.Id.Value);
-
-            int emitCapacity = pair.Front.IsCreated ? math.max(1024, pair.Front.ActiveSlotCount * pair.Front.Spec.ElementsPerChunk * 5) : 0;
+            
             int count = _clips.CalculateEntityCount();
-            int totalRequired = emitCapacity + count;
 
-            if (totalRequired > 0)
+            if (count > 0)
             {
                 if (!pair.PendingStamps.IsCreated)
                 {
-                    pair.PendingStamps = new NativeList<Stamp>(totalRequired, state.WorldUpdateAllocator);
+                    pair.PendingStamps = new NativeList<Stamp>(count, state.WorldUpdateAllocator);
                 }
                 else
                 {
                     pair.WriterDependency.Complete();
-                    pair.PendingStamps.Capacity = math.max(pair.PendingStamps.Capacity, pair.PendingStamps.Length + totalRequired);
+                    pair.PendingStamps.Capacity = math.max(pair.PendingStamps.Capacity, pair.PendingStamps.Length + count);
                 }
             }
 
             if (pair.Front.IsCreated)
             {
-                JobHandle feedback = new DiffusionFeedbackJob
+                pair.PendingStencil = new InfluenceField.StencilConfig
                 {
+                    IsActive = true,
                     ActiveSlots = pair.Front.ActiveSlotsDeferred,
                     CoordBySlot = pair.Front.CoordBySlotDeferred,
                     Data = pair.Front.DataDeferred,
-                    Spec = pair.Front.Spec,
-                    SpreadDenominator = config.SpreadDenominator,
+                    SlotByCoord = pair.Front.SlotByCoordReadOnly,
                     DecayPerMille = config.DecayPerMille,
-                    Emit = pair.PendingStamps.AsParallelWriter()
-                }.Schedule(state.Dependency);
-
-                pair.WriterDependency = JobHandle.CombineDependencies(pair.WriterDependency, feedback);
-                state.Dependency = feedback;
+                    SpreadDenominator = config.SpreadDenominator
+                };
             }
 
             if (count > 0)

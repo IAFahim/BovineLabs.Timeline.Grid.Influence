@@ -71,6 +71,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
         public bool DoubleBuffered;
 
         public NativeList<Stamp> PendingStamps;
+        public InfluenceField.StencilConfig PendingStencil;
         public JobHandle WriterDependency;
 
         public void Swap()

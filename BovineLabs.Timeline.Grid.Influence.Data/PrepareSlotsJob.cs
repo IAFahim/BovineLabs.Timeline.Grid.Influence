@@ -24,6 +24,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public bool ResetFrame;
         public uint RetentionFrames;
 
+        public bool HasStencil;
+        [ReadOnly] public NativeArray<int> StencilActiveSlots;
+        [ReadOnly] public NativeArray<int2> StencilCoordBySlot;
+        [ReadOnly] public NativeArray<int> StencilData;
+        public int DecayPerMille;
+        public int SpreadDenominator;
+
         public void Execute()
         {
             if (ResetFrame)
@@ -50,6 +57,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
             ActiveSlots.Clear();
 
+            if (HasStencil)
+            {
+                ActivateStencilFrontier();
+            }
+
             if (!Stamps.IsCreated)
             {
                 StampCount.Length = 0;
@@ -68,6 +80,50 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
             Offsets[Stamps.Length] = IntegerMath.ClampToInt(running);
             Spans.Length = Offsets[Stamps.Length];
+        }
+
+        void ActivateStencilFrontier()
+        {
+            int chunkSize = Spec.ChunkSize;
+            int stride = Spec.Stride;
+            int elements = Spec.ElementsPerChunk;
+
+            for (int i = 0; i < StencilActiveSlots.Length; i++)
+            {
+                int slot = StencilActiveSlots[i];
+                int2 coord = StencilCoordBySlot[slot];
+                Activate(coord);
+
+                int baseIndex = slot * elements;
+                
+                if (NeedsActivationEdge(baseIndex, 0, 0, 0, 1, chunkSize, stride))
+                    Activate(coord + new int2(-1, 0));
+                
+                if (NeedsActivationEdge(baseIndex, chunkSize - 1, 0, 0, 1, chunkSize, stride))
+                    Activate(coord + new int2(1, 0));
+                
+                if (NeedsActivationEdge(baseIndex, 0, 0, 1, 0, chunkSize, stride))
+                    Activate(coord + new int2(0, -1));
+                
+                if (NeedsActivationEdge(baseIndex, 0, chunkSize - 1, 1, 0, chunkSize, stride))
+                    Activate(coord + new int2(0, 1));
+            }
+        }
+
+        bool NeedsActivationEdge(int baseIndex, int startX, int startY, int dx, int dy, int count, int stride)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                int x = startX + i * dx;
+                int y = startY + i * dy;
+                int v = StencilData[baseIndex + y * stride + x];
+                if (v != 0)
+                {
+                    int vp = v - (int)((long)v * DecayPerMille / 1000);
+                    if (vp / SpreadDenominator != 0) return true;
+                }
+            }
+            return false;
         }
 
         void ActivateBounds(in CellRect bounds)

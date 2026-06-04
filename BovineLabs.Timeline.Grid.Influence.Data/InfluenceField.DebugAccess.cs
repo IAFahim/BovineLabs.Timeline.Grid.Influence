@@ -9,6 +9,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         internal NativeArray<int> ActiveSlotsDeferred => _activeSlots.AsDeferredJobArray();
         internal NativeArray<int2> CoordBySlotDeferred => _coordBySlot.AsDeferredJobArray();
         internal NativeArray<int> DataDeferred => _data.AsDeferredJobArray();
+        internal NativeFlatMap.ReadOnly SlotByCoordReadOnly => _slotByCoord.AsReadOnly();
         
         internal NativeList<int> ActiveSlotsList => _activeSlots;
         internal NativeList<int2> CoordBySlotList => _coordBySlot;

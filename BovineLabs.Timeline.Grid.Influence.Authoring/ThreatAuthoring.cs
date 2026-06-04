@@ -4,7 +4,7 @@ using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
 using BovineLabs.Timeline.Grid.Influence.Data;
-using BovineLabs.Timeline.Grid.Influence.Features.Threat;
+using BovineLabs.Timeline.Grid.Influence.Features;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;

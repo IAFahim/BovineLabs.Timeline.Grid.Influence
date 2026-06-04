@@ -1,19 +1,19 @@
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
+using BovineLabs.Reaction.Data.Core;
+using BovineLabs.Timeline.Data;
+using BovineLabs.Timeline.EntityLinks;
+using BovineLabs.Timeline.EntityLinks.Data;
+using BovineLabs.Timeline.Grid.Influence.Data;
+using BovineLabs.Timeline.Grid.Influence.Fields;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Transforms;
-using BovineLabs.Timeline.Data;
-using BovineLabs.Reaction.Data.Core;
-using BovineLabs.Timeline.EntityLinks;
-using BovineLabs.Timeline.EntityLinks.Data;
-using BovineLabs.Timeline.Grid.Influence.Data;
-using BovineLabs.Timeline.Grid.Influence.Fields;
 
-namespace BovineLabs.Timeline.Grid.Influence.Features.Threat
+namespace BovineLabs.Timeline.Grid.Influence.Features
 {
     public struct ThreatClipTag : IComponentData { }
     

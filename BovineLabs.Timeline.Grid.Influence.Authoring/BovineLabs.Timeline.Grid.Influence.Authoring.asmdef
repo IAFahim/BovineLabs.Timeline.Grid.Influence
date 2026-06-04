@@ -12,7 +12,10 @@
     "Unity.Timeline",
     "Unity.Burst",
     "Unity.Collections",
-    "Unity.Entities.Hybrid"
+    "Unity.Entities.Hybrid",
+    "BovineLabs.Timeline.EntityLinks.Authoring",
+    "BovineLabs.Reaction.Data",
+    "BovineLabs.Reaction.Authoring"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

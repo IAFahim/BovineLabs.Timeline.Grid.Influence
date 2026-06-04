@@ -1,3 +1,4 @@
+using BovineLabs.Reaction.Data.Core;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -7,5 +8,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
     {
         public InfluenceShape Shape;
         public float3 LocalOffset;
+
+        public Target OriginTarget;
+        public ushort OriginLinkKey;
     }
 }

@@ -5,7 +5,8 @@
     "Unity.Burst",
     "Unity.Collections",
     "Unity.Entities",
-    "Unity.Mathematics"
+    "Unity.Mathematics",
+    "BovineLabs.Reaction.Data"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

@@ -12,7 +12,10 @@
     "Unity.Entities",
     "Unity.Mathematics",
     "Unity.Transforms",
-    "Unity.Jobs"
+    "Unity.Jobs",
+    "BovineLabs.Reaction.Data",
+    "BovineLabs.Timeline.EntityLinks",
+    "BovineLabs.Timeline.EntityLinks.Data"
   ],
   "includePlatforms": [
     "Editor"

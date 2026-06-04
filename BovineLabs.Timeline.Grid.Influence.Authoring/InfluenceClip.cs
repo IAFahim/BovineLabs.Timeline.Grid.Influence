@@ -1,4 +1,6 @@
+using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Authoring;
+using BovineLabs.Timeline.EntityLinks.Authoring;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -10,6 +12,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
     [System.Serializable]
     public sealed class InfluenceClip : DOTSClip, ITimelineClipAsset
     {
+        [Header("Origin Routing")]
+        public Target originTarget = Target.Owner;
+        public EntityLinkSchema originLink;
+
         [Header("Shape")]
         public ShapeKind Kind = ShapeKind.Disc;
         public int Weight = 1;
@@ -52,14 +58,27 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
         public override double duration => 1.0;
 
-        public ClipCaps clipCaps => ClipCaps.None;
+        public ClipCaps clipCaps => ClipCaps.Blending | ClipCaps.Looping;
 
         public override void Bake(Entity clipEntity, BakingContext context)
         {
+            ushort linkKey = 0;
+            if (originLink != null && EntityLinkAuthoringUtility.TryGetKey(originLink, out var key))
+            {
+                linkKey = key;
+            }
+
+            if (context.Binding != null && context.Binding.Target != Entity.Null)
+            {
+                context.Baker.AddTransformUsageFlags(context.Binding.Target, TransformUsageFlags.Dynamic);
+            }
+
             context.Baker.AddComponent(clipEntity, new InfluenceClipData
             {
                 Shape = BuildShape(),
-                LocalOffset = LocalOffset
+                LocalOffset = LocalOffset,
+                OriginTarget = originTarget,
+                OriginLinkKey = linkKey
             });
 
             base.Bake(clipEntity, context);

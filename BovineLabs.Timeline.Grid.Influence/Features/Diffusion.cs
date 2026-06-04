@@ -5,6 +5,11 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Transforms;
 using BovineLabs.Timeline.Data;
+using BovineLabs.Reaction.Data.Core;
+using BovineLabs.Core.Extensions;
+using BovineLabs.Core.Iterators;
+using BovineLabs.Timeline.EntityLinks;
+using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using BovineLabs.Timeline.Grid.Influence.Fields;
 
@@ -27,17 +32,33 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Diffusion
     {
         EntityQuery _clips;
 
+        private UnsafeComponentLookup<Targets> _targetsLookup;
+        private UnsafeComponentLookup<EntityLinkSource> _linkSourceLookup;
+        private UnsafeBufferLookup<EntityLinkEntry> _linkLookup;
+        private UnsafeComponentLookup<LocalToWorld> _localToWorldLookup;
+
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<InfluenceGridSettings>();
             state.RequireForUpdate<FieldRegistrySingleton>();
+
+            _targetsLookup = state.GetUnsafeComponentLookup<Targets>(true);
+            _linkSourceLookup = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
+            _linkLookup = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
+            _localToWorldLookup = state.GetUnsafeComponentLookup<LocalToWorld>(true);
+
             _clips = SystemAPI.QueryBuilder()
-                .WithAll<InfluenceClipData, TrackBinding, ClipActive, DiffusionClipTag>()
+                .WithAll<InfluenceClipData, TrackBinding, ClipActive, ClipWeight, DiffusionClipTag>()
                 .Build();
         }
 
         public void OnUpdate(ref SystemState state)
         {
+            _targetsLookup.Update(ref state);
+            _linkSourceLookup.Update(ref state);
+            _linkLookup.Update(ref state);
+            _localToWorldLookup.Update(ref state);
+
             ref var regSingleton = ref SystemAPI.GetSingletonRW<FieldRegistrySingleton>().ValueRW;
             if (!SystemAPI.HasSingleton<DiffusionFieldConfig>())
             {
@@ -97,7 +118,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Diffusion
                     Stamps = pair.PendingStamps.AsParallelWriter(),
                     CellSize = math.max(0.0001f, settings.CellSize),
                     Basis = new GridBasis(settings.PlaneNormal),
-                    LocalToWorldLookup = SystemAPI.GetComponentLookup<LocalToWorld>(true)
+                    LocalToWorldLookup = _localToWorldLookup,
+                    TargetsLookup = _targetsLookup,
+                    LinkSources = _linkSourceLookup,
+                    Links = _linkLookup
                 }.ScheduleParallel(_clips, state.Dependency);
 
                 pair.WriterDependency = JobHandle.CombineDependencies(pair.WriterDependency, gather);
@@ -110,14 +134,39 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Diffusion
         partial struct GatherDiffusionStampsJob : IJobEntity
         {
             public NativeList<Stamp>.ParallelWriter Stamps;
-            [Unity.Collections.ReadOnly] public ComponentLookup<LocalToWorld> LocalToWorldLookup;
+            [Unity.Collections.ReadOnly] public UnsafeComponentLookup<LocalToWorld> LocalToWorldLookup;
+            [Unity.Collections.ReadOnly] public UnsafeComponentLookup<Targets> TargetsLookup;
+            [Unity.Collections.ReadOnly] public UnsafeComponentLookup<EntityLinkSource> LinkSources;
+            [Unity.Collections.ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Links;
+            
             public float CellSize;
             public GridBasis Basis;
 
-            void Execute(in InfluenceClipData clip, in TrackBinding binding)
+            void Execute(in InfluenceClipData clip, in TrackBinding binding, in ClipWeight weight)
             {
-                if (binding.Value == Entity.Null || !LocalToWorldLookup.TryGetComponent(binding.Value, out var localToWorld))
-                    return;
+                var targetEntity = binding.Value;
+                if (targetEntity == Entity.Null) return;
+
+                var originEntity = targetEntity;
+
+                if (clip.OriginTarget != Target.None && clip.OriginTarget != Target.Self)
+                {
+                    var targets = TargetsLookup.TryGetComponent(targetEntity, out var t) ? t : default;
+                    var baseTarget = targets.Get(clip.OriginTarget, targetEntity);
+                    if (baseTarget != Entity.Null)
+                    {
+                        originEntity = baseTarget;
+                        if (clip.OriginLinkKey != 0 && EntityLinkResolver.TryResolve(baseTarget, clip.OriginLinkKey, LinkSources, Links, out var linked))
+                        {
+                            originEntity = linked;
+                        }
+                    }
+                }
+
+                if (!LocalToWorldLookup.TryGetComponent(originEntity, out var localToWorld)) return;
+
+                int scaledWeight = (int)math.round(clip.Shape.Weight * weight.Value);
+                if (scaledWeight == 0) return;
 
                 float3 world = localToWorld.Position + math.rotate(localToWorld.Rotation, clip.LocalOffset);
                 float2 projected = Basis.ToGridSpace(world);
@@ -126,7 +175,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Diffusion
                     (int)math.floor(projected.x / CellSize),
                     (int)math.floor(projected.y / CellSize));
 
-                Stamps.AddNoResize(new Stamp(clip.Shape, origin));
+                Stamps.AddNoResize(new Stamp(clip.Shape.WithWeight(scaledWeight), origin));
             }
         }
     }

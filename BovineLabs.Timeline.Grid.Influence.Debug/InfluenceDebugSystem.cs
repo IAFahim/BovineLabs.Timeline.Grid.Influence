@@ -4,6 +4,11 @@ using BovineLabs.Core;
 using BovineLabs.Quill;
 using BovineLabs.Timeline.Core.Debug;
 using BovineLabs.Timeline.Data;
+using BovineLabs.Core.Extensions;
+using BovineLabs.Core.Iterators;
+using BovineLabs.Reaction.Data.Core;
+using BovineLabs.Timeline.EntityLinks;
+using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Burst;
 using Unity.Collections;
@@ -65,7 +70,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             state.RequireForUpdate<InfluenceGridSettings>();
 
             _stampQuery = SystemAPI.QueryBuilder()
-                .WithAll<TrackBinding, InfluenceClipData, ClipActive>()
+                .WithAll<TrackBinding, InfluenceClipData, ClipActive, ClipWeight>()
                 .Build();
         }
 
@@ -90,7 +95,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
                     CellSize = settings.CellSize,
                     Basis = basis,
-                    LocalToWorldLookup = SystemAPI.GetComponentLookup<LocalToWorld>(true)
+                    LocalToWorldLookup = state.GetUnsafeComponentLookup<LocalToWorld>(true),
+                    TargetsLookup = state.GetUnsafeComponentLookup<Targets>(true),
+                    LinkSources = state.GetUnsafeComponentLookup<EntityLinkSource>(true),
+                    Links = state.GetUnsafeBufferLookup<EntityLinkEntry>(true)
                 }.ScheduleParallel(_stampQuery, state.Dependency);
             }
 
@@ -135,16 +143,38 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             public float CellSize;
             public GridBasis Basis;
 
-            [ReadOnly] public ComponentLookup<LocalToWorld> LocalToWorldLookup;
+            [ReadOnly] public UnsafeComponentLookup<LocalToWorld> LocalToWorldLookup;
+            [ReadOnly] public UnsafeComponentLookup<Targets> TargetsLookup;
+            [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> LinkSources;
+            [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Links;
 
-            public void Execute(in TrackBinding binding, in InfluenceClipData clip)
+            public void Execute(in TrackBinding binding, in InfluenceClipData clip, in ClipWeight weight)
             {
-                if (!LocalToWorldLookup.TryGetComponent(binding.Value, out var localToWorld))
+                var targetEntity = binding.Value;
+                if (targetEntity == Entity.Null) return;
+
+                var originEntity = targetEntity;
+
+                if (clip.OriginTarget != Target.None && clip.OriginTarget != Target.Self)
                 {
-                    return;
+                    var targets = TargetsLookup.TryGetComponent(targetEntity, out var t) ? t : default;
+                    var baseTarget = targets.Get(clip.OriginTarget, targetEntity);
+                    if (baseTarget != Entity.Null)
+                    {
+                        originEntity = baseTarget;
+                        if (clip.OriginLinkKey != 0 && EntityLinkResolver.TryResolve(baseTarget, clip.OriginLinkKey, LinkSources, Links, out var linked))
+                        {
+                            originEntity = linked;
+                        }
+                    }
                 }
 
-                InfluenceShape shape = clip.Shape;
+                if (!LocalToWorldLookup.TryGetComponent(originEntity, out var localToWorld)) return;
+
+                int scaledWeight = (int)math.round(clip.Shape.Weight * weight.Value);
+                if (scaledWeight == 0) return;
+
+                InfluenceShape shape = clip.Shape.WithWeight(scaledWeight);
                 Color color = shape.Weight >= 0 ? PositiveColor : NegativeColor;
                 color.a *= 0.8f;
 

@@ -48,6 +48,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Diffusion
                     ChunkPower = settings.ChunkSizePowerOfTwo,
                     RetentionFrames = uint.MaxValue,
                     HasFeedback = true,
+                    StrideAlignment = settings.StrideAlignment
                 }, Allocator.Persistent);
                 var e = state.EntityManager.CreateEntity();
                 state.EntityManager.AddComponentData(e, new DiffusionFieldConfig { Id = id, SpreadDenominator = 5, DecayPerMille = 30 });

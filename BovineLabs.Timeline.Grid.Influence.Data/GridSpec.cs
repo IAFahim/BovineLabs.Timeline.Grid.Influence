@@ -22,12 +22,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             RetentionFrames = retentionFrames;
         }
 
-        public static GridSpec FromPowerOfTwo(int chunkSizePowerOfTwo, uint retentionFrames)
+        public static GridSpec FromPowerOfTwo(int chunkSizePowerOfTwo, uint retentionFrames, int strideAlignment = 8)
         {
             int log2 = math.clamp(chunkSizePowerOfTwo, 1, 8);
             int chunkSize = 1 << log2;
             int dimension = chunkSize + 1;
-            int stride = (dimension + 7) & ~7;
+            int alignMask = strideAlignment - 1;
+            int stride = (dimension + alignMask) & ~alignMask;
             int elementsPerChunk = stride * dimension;
             return new GridSpec(log2, chunkSize, dimension, stride, elementsPerChunk, retentionFrames);
         }

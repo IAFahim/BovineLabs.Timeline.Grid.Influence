@@ -24,6 +24,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         [Min(0)]
         public int ChunkRetentionFrames = 300;
 
+        [Tooltip("Stride alignment (bytes or elements). For NEON use 4, for AVX use 8.")]
+        public int StrideAlignment = 4;
+
         public override void Bake(Baker<SettingsAuthoring> baker)
         {
             var entity = baker.GetEntity(TransformUsageFlags.None);
@@ -32,7 +35,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 CellSize = math.max(0.01f, CellSize),
                 PlaneNormal = math.normalizesafe(PlaneNormal, math.up()),
                 ChunkSizePowerOfTwo = math.clamp(ChunkSizePowerOfTwo, 1, 8),
-                ChunkRetentionFrames = (uint)math.max(0, ChunkRetentionFrames)
+                ChunkRetentionFrames = (uint)math.max(0, ChunkRetentionFrames),
+                StrideAlignment = StrideAlignment
             });
         }
     }

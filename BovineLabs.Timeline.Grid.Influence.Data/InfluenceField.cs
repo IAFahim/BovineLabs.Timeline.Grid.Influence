@@ -57,7 +57,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             return new FieldReader(
                 _slotByCoord.AsReadOnly(),
                 _lastWrittenBySlot.AsArray(),
-                (int*)_data.GetUnsafePtr(),
+                _data.AsArray(),
                 _spec,
                 _frameId);
         }

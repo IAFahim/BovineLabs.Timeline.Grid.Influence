@@ -10,5 +10,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public float3 PlaneNormal;
         public int ChunkSizePowerOfTwo;
         public uint ChunkRetentionFrames;
+        public int StrideAlignment;
     }
 }

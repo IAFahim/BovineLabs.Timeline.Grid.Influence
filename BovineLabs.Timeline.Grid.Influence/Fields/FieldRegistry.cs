@@ -22,6 +22,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
         public int ChunkPower;
         public uint RetentionFrames;
         public bool HasFeedback;
+        public int StrideAlignment;
 
         public bool NeedsDoubleBuffer => HasFeedback;
     }
@@ -38,7 +39,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
             if (Count >= Pairs.Length) return FieldId.Invalid;
             int i = Count++;
             ref var pair = ref this.Slot(i);
-            var spec = GridSpec.FromPowerOfTwo(config.ChunkPower, config.RetentionFrames);
+            int align = config.StrideAlignment == 0 ? 8 : config.StrideAlignment;
+            var spec = GridSpec.FromPowerOfTwo(config.ChunkPower, config.RetentionFrames, align);
             pair.Config = config;
             pair.Front = InfluenceField.Create(spec, allocator);
             pair.DoubleBuffered = config.NeedsDoubleBuffer;

@@ -1,12 +1,13 @@
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data
 {
     [BurstCompile]
-    public struct PrepareSlotsAndOffsetsJob : IJob
+    public unsafe struct PrepareSlotsAndOffsetsJob : IJob
     {
         [ReadOnly] public NativeArray<Stamp> Stamps;
         public NativeList<int> Offsets;
@@ -51,6 +52,54 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                         LastWrittenBySlot[i] = 0;
                         FreeSlots.Add(i);
                         SlotByCoord.Remove(CoordBySlot[i]);
+                    }
+                }
+            }
+
+            if (FrameId % 60 == 0 && FreeSlots.Length > 0)
+            {
+                int highestSlot = CoordBySlot.Length - 1;
+                for (int i = 0; i < FreeSlots.Length; i++)
+                {
+                    while (highestSlot >= 0 && LastWrittenBySlot[highestSlot] == 0)
+                    {
+                        highestSlot--;
+                    }
+                    
+                    int freeSlot = FreeSlots[i];
+                    if (freeSlot >= highestSlot) continue;
+                    
+                    int elements = Spec.ElementsPerChunk;
+                    unsafe
+                    {
+                        void* dst = (int*)Data.GetUnsafePtr() + freeSlot * elements;
+                        void* src = (int*)Data.GetUnsafePtr() + highestSlot * elements;
+                        UnsafeUtility.MemCpy(dst, src, elements * sizeof(int));
+                    }
+                    
+                    int2 coord = CoordBySlot[highestSlot];
+                    CoordBySlot[freeSlot] = coord;
+                    LastWrittenBySlot[freeSlot] = LastWrittenBySlot[highestSlot];
+                    SlotByCoord.Add(coord, freeSlot);
+                    
+                    LastWrittenBySlot[highestSlot] = 0;
+                    highestSlot--;
+                }
+                
+                int newCount = highestSlot + 1;
+                if (newCount < CoordBySlot.Length)
+                {
+                    CoordBySlot.Length = newCount;
+                    LastWrittenBySlot.Length = newCount;
+                    Data.Length = newCount * Spec.ElementsPerChunk;
+                }
+                
+                FreeSlots.Clear();
+                for (int slot = 0; slot < newCount; slot++)
+                {
+                    if (LastWrittenBySlot[slot] == 0)
+                    {
+                        FreeSlots.Add(slot);
                     }
                 }
             }

@@ -9,14 +9,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
     {
         [ReadOnly] NativeFlatMap.ReadOnly _slotByCoord;
         [ReadOnly] NativeArray<uint> _lastWrittenBySlot;
-        [NativeDisableUnsafePtrRestriction] int* _data;
+        [ReadOnly] NativeArray<int> _data;
         GridSpec _spec;
         uint _frameId;
 
         internal FieldReader(
             NativeFlatMap.ReadOnly slotByCoord,
             NativeArray<uint> lastWrittenBySlot,
-            int* data,
+            NativeArray<int> data,
             in GridSpec spec,
             uint frameId)
         {
@@ -54,7 +54,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 return false;
             }
 
-            view = new ChunkView(_data + slot * _spec.ElementsPerChunk, ChunkMath.ChunkBaseOf(coord, _spec.Log2), _spec);
+            view = new ChunkView((int*)_data.GetUnsafeReadOnlyPtr() + slot * _spec.ElementsPerChunk, ChunkMath.ChunkBaseOf(coord, _spec.Log2), _spec);
             return true;
         }
     }

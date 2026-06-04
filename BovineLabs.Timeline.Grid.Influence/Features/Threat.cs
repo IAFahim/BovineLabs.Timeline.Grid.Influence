@@ -43,6 +43,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Features.Threat
                     ChunkPower = settings.ChunkSizePowerOfTwo,
                     RetentionFrames = 1,
                     HasFeedback = false,
+                    StrideAlignment = settings.StrideAlignment
                 }, Allocator.Persistent);
                 var e = state.EntityManager.CreateEntity();
                 state.EntityManager.AddComponentData(e, new ThreatField { Id = id });

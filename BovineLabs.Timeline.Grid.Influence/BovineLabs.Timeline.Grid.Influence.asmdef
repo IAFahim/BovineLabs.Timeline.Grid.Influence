@@ -16,7 +16,9 @@
     "BovineLabs.Timeline.EntityLinks.Data",
     "BovineLabs.Core",
     "BovineLabs.Core.Extensions",
-    "BovineLabs.Core.Iterators"
+    "BovineLabs.Core.Iterators",
+    "BovineLabs.Timeline.Physics",
+    "BovineLabs.Timeline.Physics.Data"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

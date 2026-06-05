@@ -7,7 +7,10 @@
     "Unity.Entities",
     "Unity.Jobs",
     "Unity.Mathematics",
-    "BovineLabs.Reaction.Data"
+    "BovineLabs.Reaction.Data",
+    "BovineLabs.Timeline",
+    "BovineLabs.Timeline.Data",
+    "BovineLabs.Timeline.Physics.Data"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

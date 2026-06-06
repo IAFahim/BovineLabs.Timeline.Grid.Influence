@@ -1,5 +1,5 @@
-using Unity.Burst;
 using BovineLabs.Timeline.Grid.Influence.Data;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -116,6 +116,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
         private struct ClearMapJob : IJob
         {
             public NativeParallelMultiHashMap<int, Stamp> Map;
+
             public void Execute()
             {
                 Map.Clear();

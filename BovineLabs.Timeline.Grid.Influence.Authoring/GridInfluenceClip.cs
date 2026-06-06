@@ -104,7 +104,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
         private ushort ResolveLinkKey()
         {
-            return originLink != null && EntityLinkAuthoringUtility.TryGetKey(originLink, out var key) ? key : (ushort)0;
+            return originLink != null && EntityLinkAuthoringUtility.TryGetKey(originLink, out var key)
+                ? key
+                : (ushort)0;
         }
 
         private void BindOriginTransform(BakingContext context)

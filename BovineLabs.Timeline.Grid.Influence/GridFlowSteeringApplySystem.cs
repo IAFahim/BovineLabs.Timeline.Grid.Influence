@@ -1,6 +1,4 @@
 using BovineLabs.Core.ConfigVars;
-using BovineLabs.Core.Extensions;
-using BovineLabs.Core.Iterators;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using BovineLabs.Timeline.Physics;
 using BovineLabs.Timeline.Physics.Infrastructure;
@@ -16,7 +14,8 @@ namespace BovineLabs.Timeline.Grid.Influence
 {
     [Configurable]
     [UpdateInGroup(typeof(PhysicsProducerGroup))]
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial struct GridFlowSteeringApplySystem : ISystem
     {
         private EntityTypeHandle _entityHandle;
@@ -90,7 +89,8 @@ namespace BovineLabs.Timeline.Grid.Influence
             [ReadOnly] public ComponentTypeHandle<LocalToWorld> LtwHandle;
             public BufferTypeHandle<PendingForce> ForceHandle;
 
-            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
+                in v128 chunkEnabledMask)
             {
                 var actives = chunk.GetNativeArray(ref ActiveHandle);
                 var states = chunk.GetNativeArray(ref StateHandle);
@@ -114,20 +114,21 @@ namespace BovineLabs.Timeline.Grid.Influence
 
                     var reader = field.AsReader();
                     var pos = ltws[i].Position;
-                    
+
                     var projected = Basis.ToGridSpace(pos);
                     var origin = new int2(
                         (int)math.floor(projected.x / CellSize),
                         (int)math.floor(projected.y / CellSize));
 
-                    var gradient = CalculatePotentialGradient(in config.SamplerShape, origin, in reader, in Basis, CellSize, pos);
+                    var gradient = CalculatePotentialGradient(in config.SamplerShape, origin, in reader, in Basis,
+                        CellSize, pos);
                     var magnitudeSq = math.lengthsq(gradient);
 
                     if (magnitudeSq > 1e-5f)
                     {
-                        var forceDir = (gradient * math.rsqrt(magnitudeSq)) * (config.Strength * config.Polarity);
+                        var forceDir = gradient * math.rsqrt(magnitudeSq) * (config.Strength * config.Polarity);
                         var timeScale = config.Mode == PhysicsForceMode.Impulse ? 1f : DeltaTime;
-                        
+
                         forces[i].Add(new PendingForce
                         {
                             Linear = forceDir * timeScale,
@@ -144,11 +145,11 @@ namespace BovineLabs.Timeline.Grid.Influence
             }
 
             private unsafe float3 CalculatePotentialGradient(
-                in InfluenceShape shape, 
-                int2 origin, 
-                in FieldReader reader, 
-                in GridBasis basis, 
-                float cellSize, 
+                in InfluenceShape shape,
+                int2 origin,
+                in FieldReader reader,
+                in GridBasis basis,
+                float cellSize,
                 float3 entityPos)
             {
                 var capacity = Rasterizer.EstimateSpanCount(shape);
@@ -159,7 +160,8 @@ namespace BovineLabs.Timeline.Grid.Influence
                 Rasterizer.Emit(new Stamp(shape, origin), ref sink);
 
                 var totalVector = float3.zero;
-                var entityPlanar = basis.Right * math.dot(entityPos, basis.Right) + basis.Forward * math.dot(entityPos, basis.Forward);
+                var entityPlanar = basis.Right * math.dot(entityPos, basis.Right) +
+                                   basis.Forward * math.dot(entityPos, basis.Forward);
 
                 for (var i = 0; i < sink.Count; i++)
                 {
@@ -180,7 +182,7 @@ namespace BovineLabs.Timeline.Grid.Influence
                         var distSq = math.lengthsq(diff);
 
                         if (distSq > 1e-4f)
-                            totalVector += (diff * math.rsqrt(distSq)) * influence * span.Weight;
+                            totalVector += diff * math.rsqrt(distSq) * influence * span.Weight;
                     }
                 }
 

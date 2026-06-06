@@ -1,7 +1,5 @@
 using BovineLabs.Core.EntityCommands;
 using BovineLabs.Reaction.Data.Core;
-using BovineLabs.Timeline.Grid.Influence.Data;
-using Unity.Entities;
 using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data.Builders

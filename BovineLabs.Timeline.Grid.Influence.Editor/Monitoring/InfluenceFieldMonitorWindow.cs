@@ -13,49 +13,32 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
         private const int DefaultMaxCapturedChunks = 512;
 
         private readonly List<World> _worlds = new(4);
-        private string[] _worldNames = Array.Empty<string>();
-
-        private int _worldIndex;
-        private int _fieldIndex;
-        private int _selectedChunkIndex;
 
         private bool _autoRefresh = true;
-        private bool _showZeroChunks = true;
-        private bool _normalizePerChunk;
-        private bool _showCellValues;
-        private int _maxCapturedChunks = DefaultMaxCapturedChunks;
-        private int _manualAbsMax;
-
-        private Vector2 _fieldScroll;
-        private Vector2 _chunkScroll;
         private Vector2 _cellScroll;
-
-        private InfluenceFieldSnapshot _snapshot;
-        private string _error;
+        private Vector2 _chunkScroll;
 
         private Texture2D _chunkTexture;
-        private int _lastTextureHash;
+        private string _error;
+        private int _fieldIndex;
 
-        [MenuItem("Window/BovineLabs/Grid Influence/Field Monitor")]
-        private static void Open()
-        {
-            var window = GetWindow<InfluenceFieldMonitorWindow>();
-            window.titleContent = new GUIContent("Influence Fields");
-            window.Show();
-        }
+        private Vector2 _fieldScroll;
+        private int _lastTextureHash;
+        private int _manualAbsMax;
+        private int _maxCapturedChunks = DefaultMaxCapturedChunks;
+        private bool _normalizePerChunk;
+        private int _selectedChunkIndex;
+        private bool _showCellValues;
+        private bool _showZeroChunks = true;
+
+        private InfluenceFieldSnapshot _snapshot;
+
+        private int _worldIndex;
+        private string[] _worldNames = Array.Empty<string>();
 
         private void OnDisable()
         {
             DestroyPreviewTexture();
-        }
-
-        private void OnInspectorUpdate()
-        {
-            if (!_autoRefresh)
-                return;
-
-            Refresh();
-            Repaint();
         }
 
         private void OnGUI()
@@ -82,15 +65,30 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             }
         }
 
+        private void OnInspectorUpdate()
+        {
+            if (!_autoRefresh)
+                return;
+
+            Refresh();
+            Repaint();
+        }
+
+        [MenuItem("Window/BovineLabs/Grid Influence/Field Monitor")]
+        private static void Open()
+        {
+            var window = GetWindow<InfluenceFieldMonitorWindow>();
+            window.titleContent = new GUIContent("Influence Fields");
+            window.Show();
+        }
+
         private void RefreshWorldCache()
         {
             _worlds.Clear();
 
             foreach (var world in World.All)
-            {
                 if (world != null && world.IsCreated)
                     _worlds.Add(world);
-            }
 
             if (_worldNames.Length != _worlds.Count)
                 _worldNames = new string[_worlds.Count];
@@ -128,7 +126,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                         }
                     }
 
-                    _autoRefresh = GUILayout.Toggle(_autoRefresh, "Auto", EditorStyles.toolbarButton, GUILayout.Width(55));
+                    _autoRefresh = GUILayout.Toggle(_autoRefresh, "Auto", EditorStyles.toolbarButton,
+                        GUILayout.Width(55));
 
                     if (GUILayout.Button("Refresh", GUILayout.Width(80)))
                         Refresh();
@@ -143,7 +142,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     _showZeroChunks = GUILayout.Toggle(_showZeroChunks, "Show zero chunks", EditorStyles.miniButton);
-                    _normalizePerChunk = GUILayout.Toggle(_normalizePerChunk, "Normalize preview per chunk", EditorStyles.miniButton);
+                    _normalizePerChunk = GUILayout.Toggle(_normalizePerChunk, "Normalize preview per chunk",
+                        EditorStyles.miniButton);
                     _showCellValues = GUILayout.Toggle(_showCellValues, "Show cell values", EditorStyles.miniButton);
                 }
             }
@@ -225,7 +225,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                     if (!_showZeroChunks && chunk.NonZeroCells == 0)
                         continue;
 
-                    using (new EditorGUILayout.HorizontalScope(i == _selectedChunkIndex ? "SelectionRect" : GUIStyle.none))
+                    using (new EditorGUILayout.HorizontalScope(i == _selectedChunkIndex
+                               ? "SelectionRect"
+                               : GUIStyle.none))
                     {
                         if (GUILayout.Button(
                                 $"({chunk.Coord.x}, {chunk.Coord.y})",
@@ -233,7 +235,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                                 GUILayout.Width(100)))
                         {
                             _selectedChunkIndex = i;
-                            RebuildPreviewTexture(force: true);
+                            RebuildPreviewTexture(true);
                         }
 
                         EditorGUILayout.LabelField($"nz {chunk.NonZeroCells}", GUILayout.Width(70));
@@ -272,7 +274,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 DrawReadOnly("Non-Zero", chunk.NonZeroCells.ToString());
                 DrawReadOnly("Sum", chunk.SumValue.ToString());
 
-                RebuildPreviewTexture(force: false);
+                RebuildPreviewTexture(false);
 
                 if (_chunkTexture != null)
                 {
@@ -298,7 +300,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             var size = _snapshot.Spec.ChunkSize;
 
             for (var y = size - 1; y >= 0; y--)
-            {
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     for (var x = 0; x < size; x++)
@@ -307,7 +308,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                         GUILayout.Label(value.ToString(), EditorStyles.miniLabel, GUILayout.Width(38));
                     }
                 }
-            }
 
             EditorGUILayout.EndScrollView();
         }
@@ -358,7 +358,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 0,
                 math.max(0, _snapshot.Chunks.Length - 1));
 
-            RebuildPreviewTexture(force: true);
+            RebuildPreviewTexture(true);
         }
 
         private void RebuildPreviewTexture(bool force)
@@ -397,12 +397,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             var pixels = new Color32[size * size];
 
             for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
             {
-                for (var x = 0; x < size; x++)
-                {
-                    var value = chunk.Cells[y * size + x];
-                    pixels[y * size + x] = ColorForValue(value, absMax);
-                }
+                var value = chunk.Cells[y * size + x];
+                pixels[y * size + x] = ColorForValue(value, absMax);
             }
 
             _chunkTexture.SetPixels32(pixels);
@@ -433,11 +431,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 var g = (byte)math.round(math.lerp(70, 255, t));
                 return new Color32(30, g, 70, a);
             }
-            else
-            {
-                var r = (byte)math.round(math.lerp(80, 255, t));
-                return new Color32(r, 35, 35, a);
-            }
+
+            var r = (byte)math.round(math.lerp(80, 255, t));
+            return new Color32(r, 35, 35, a);
         }
 
         private int HashTextureInputs(InfluenceFieldSnapshot.ChunkSnapshot chunk)
@@ -471,7 +467,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             using (new EditorGUILayout.HorizontalScope())
             {
                 EditorGUILayout.LabelField(label, GUILayout.Width(130));
-                EditorGUILayout.SelectableLabel(value, EditorStyles.label, GUILayout.Height(EditorGUIUtility.singleLineHeight));
+                EditorGUILayout.SelectableLabel(value, EditorStyles.label,
+                    GUILayout.Height(EditorGUIUtility.singleLineHeight));
             }
         }
 

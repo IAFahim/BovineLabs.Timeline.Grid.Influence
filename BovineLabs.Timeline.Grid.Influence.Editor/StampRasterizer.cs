@@ -87,7 +87,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
 
                     for (var y = y0; y < y1; y++)
                     for (var x = x0; x < x1; x++)
-                        grid[(x - min.x) + (y - min.y) * size.x] += span.Weight;
+                        grid[x - min.x + (y - min.y) * size.x] += span.Weight;
                 }
             }
             finally

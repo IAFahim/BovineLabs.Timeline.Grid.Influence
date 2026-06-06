@@ -108,10 +108,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
 
                 Handles.color = fill;
                 Handles.DrawAAConvexPolygon(
-                    (Vector3)basis.ToWorldSpace(gridPos, height),
-                    (Vector3)basis.ToWorldSpace(gridPos + new float2(cellSize, 0), height),
-                    (Vector3)basis.ToWorldSpace(gridPos + new float2(cellSize, cellSize), height),
-                    (Vector3)basis.ToWorldSpace(gridPos + new float2(0, cellSize), height));
+                    basis.ToWorldSpace(gridPos, height),
+                    basis.ToWorldSpace(gridPos + new float2(cellSize, 0), height),
+                    basis.ToWorldSpace(gridPos + new float2(cellSize, cellSize), height),
+                    basis.ToWorldSpace(gridPos + new float2(0, cellSize), height));
             }
         }
     }

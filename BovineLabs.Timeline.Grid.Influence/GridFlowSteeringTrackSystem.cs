@@ -12,7 +12,8 @@ namespace BovineLabs.Timeline.Grid.Influence
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateAfter(typeof(EntityLinkTargetPatchSystem))]
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial struct GridFlowSteeringTrackSystem : ISystem
     {
         private TrackBlendImpl<GridFlowSteeringData, GridFlowSteeringAnimated> _blendImpl;
@@ -62,7 +63,7 @@ namespace BovineLabs.Timeline.Grid.Influence
             var ecbWrite = ecbSystem.CreateCommandBuffer(state.WorldUnmanaged).AsParallelWriter();
 
             var bindingType = SystemAPI.GetComponentTypeHandle<TrackBinding>(true);
-            
+
             state.Dependency = new ResetStateTrackJob<GridFlowSteeringState, ActiveGridFlowSteering>
             {
                 TrackBindingTypeHandle = bindingType,
@@ -72,7 +73,7 @@ namespace BovineLabs.Timeline.Grid.Influence
             }.ScheduleParallel(_resetQuery, state.Dependency);
 
             var animatedType = SystemAPI.GetComponentTypeHandle<GridFlowSteeringAnimated>();
-            
+
             state.Dependency = new PrepareJob
             {
                 AnimatedTypeHandle = animatedType
@@ -99,7 +100,8 @@ namespace BovineLabs.Timeline.Grid.Influence
         {
             public ComponentTypeHandle<GridFlowSteeringAnimated> AnimatedTypeHandle;
 
-            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
+                in v128 chunkEnabledMask)
             {
                 var animateds = chunk.GetNativeArray(ref AnimatedTypeHandle);
                 var enumerator = new ChunkEntityEnumerator(useEnabledMask, chunkEnabledMask, chunk.Count);

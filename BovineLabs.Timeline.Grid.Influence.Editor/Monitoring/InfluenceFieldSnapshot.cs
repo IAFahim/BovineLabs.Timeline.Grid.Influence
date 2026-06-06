@@ -10,101 +10,27 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
 {
     internal sealed class InfluenceFieldSnapshot
     {
-        public string WorldName;
-        public InfluenceGridSettings GridSettings;
-
-        public FieldSummary[] Fields = Array.Empty<FieldSummary>();
-
-        public int SelectedFieldSlot = -1;
-        public string SelectedFieldName = string.Empty;
-
-        public GridSpec Spec;
-        public uint FrameId;
-        public bool IsDoubleBuffered;
-
         public int ActiveChunkCount;
         public int CapturedChunkCount;
-        public int TotalNonZeroCells;
-        public int MinValue;
-        public int MaxValue;
-        public long SumValue;
 
         public ChunkSnapshot[] Chunks = Array.Empty<ChunkSnapshot>();
 
+        public FieldSummary[] Fields = Array.Empty<FieldSummary>();
+        public uint FrameId;
+        public InfluenceGridSettings GridSettings;
+        public bool IsDoubleBuffered;
+        public int MaxValue;
+        public int MinValue;
+        public string SelectedFieldName = string.Empty;
+
+        public int SelectedFieldSlot = -1;
+
+        public GridSpec Spec;
+        public long SumValue;
+        public int TotalNonZeroCells;
+        public string WorldName;
+
         public bool HasSelectedField => SelectedFieldSlot >= 0;
-
-        public readonly struct FieldSummary
-        {
-            public readonly int Slot;
-            public readonly ushort Key;
-            public readonly string Name;
-            public readonly GridSpec Spec;
-            public readonly bool DoubleBuffered;
-            public readonly uint FrameId;
-            public readonly int ActiveChunks;
-            public readonly int AllocatedChunks;
-            public readonly long ApproxDataBytes;
-
-            public FieldSummary(
-                int slot,
-                ushort key,
-                string name,
-                GridSpec spec,
-                bool doubleBuffered,
-                uint frameId,
-                int activeChunks,
-                int allocatedChunks,
-                long approxDataBytes)
-            {
-                Slot = slot;
-                Key = key;
-                Name = name;
-                Spec = spec;
-                DoubleBuffered = doubleBuffered;
-                FrameId = frameId;
-                ActiveChunks = activeChunks;
-                AllocatedChunks = allocatedChunks;
-                ApproxDataBytes = approxDataBytes;
-            }
-
-            public string DisplayName =>
-                string.IsNullOrWhiteSpace(Name)
-                    ? $"#{Slot} / Key {Key}"
-                    : $"{Name}  —  Key {Key}";
-        }
-
-        public readonly struct ChunkSnapshot
-        {
-            public readonly int Slot;
-            public readonly int2 Coord;
-            public readonly int2 CellBase;
-            public readonly int[] Cells;
-
-            public readonly int MinValue;
-            public readonly int MaxValue;
-            public readonly int NonZeroCells;
-            public readonly long SumValue;
-
-            public ChunkSnapshot(
-                int slot,
-                int2 coord,
-                int2 cellBase,
-                int[] cells,
-                int minValue,
-                int maxValue,
-                int nonZeroCells,
-                long sumValue)
-            {
-                Slot = slot;
-                Coord = coord;
-                CellBase = cellBase;
-                Cells = cells;
-                MinValue = minValue;
-                MaxValue = maxValue;
-                NonZeroCells = nonZeroCells;
-                SumValue = sumValue;
-            }
-        }
 
         public static bool TryCapture(
             World world,
@@ -252,9 +178,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 !field.ActiveSlotsList.IsCreated ||
                 !field.CoordBySlotList.IsCreated ||
                 !field.DataList.IsCreated)
-            {
                 return Array.Empty<ChunkSnapshot>();
-            }
 
             var spec = field.Spec;
             var activeSlots = field.ActiveSlotsList.AsArray();
@@ -287,46 +211,44 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 var sourceBase = slot * spec.ElementsPerChunk;
 
                 for (var y = 0; y < spec.ChunkSize; y++)
+                for (var x = 0; x < spec.ChunkSize; x++)
                 {
-                    for (var x = 0; x < spec.ChunkSize; x++)
+                    var sourceIndex = sourceBase + y * spec.Stride + x;
+
+                    if ((uint)sourceIndex >= (uint)data.Length)
+                        continue;
+
+                    var value = data[sourceIndex];
+                    cells[y * spec.ChunkSize + x] = value;
+
+                    if (!chunkHasValue)
                     {
-                        var sourceIndex = sourceBase + y * spec.Stride + x;
-
-                        if ((uint)sourceIndex >= (uint)data.Length)
-                            continue;
-
-                        var value = data[sourceIndex];
-                        cells[y * spec.ChunkSize + x] = value;
-
-                        if (!chunkHasValue)
-                        {
-                            chunkMin = value;
-                            chunkMax = value;
-                            chunkHasValue = true;
-                        }
-                        else
-                        {
-                            chunkMin = math.min(chunkMin, value);
-                            chunkMax = math.max(chunkMax, value);
-                        }
-
-                        if (!hasValue)
-                        {
-                            globalMin = value;
-                            globalMax = value;
-                            hasValue = true;
-                        }
-                        else
-                        {
-                            globalMin = math.min(globalMin, value);
-                            globalMax = math.max(globalMax, value);
-                        }
-
-                        if (value != 0)
-                            nonZero++;
-
-                        chunkSum += value;
+                        chunkMin = value;
+                        chunkMax = value;
+                        chunkHasValue = true;
                     }
+                    else
+                    {
+                        chunkMin = math.min(chunkMin, value);
+                        chunkMax = math.max(chunkMax, value);
+                    }
+
+                    if (!hasValue)
+                    {
+                        globalMin = value;
+                        globalMax = value;
+                        hasValue = true;
+                    }
+                    else
+                    {
+                        globalMin = math.min(globalMin, value);
+                        globalMax = math.max(globalMax, value);
+                    }
+
+                    if (value != 0)
+                        nonZero++;
+
+                    chunkSum += value;
                 }
 
                 totalNonZero += nonZero;
@@ -373,6 +295,79 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             using var entities = query.ToEntityArray(Allocator.Temp);
             entity = entities.Length > 0 ? entities[0] : Entity.Null;
             return entity != Entity.Null;
+        }
+
+        public readonly struct FieldSummary
+        {
+            public readonly int Slot;
+            public readonly ushort Key;
+            public readonly string Name;
+            public readonly GridSpec Spec;
+            public readonly bool DoubleBuffered;
+            public readonly uint FrameId;
+            public readonly int ActiveChunks;
+            public readonly int AllocatedChunks;
+            public readonly long ApproxDataBytes;
+
+            public FieldSummary(
+                int slot,
+                ushort key,
+                string name,
+                GridSpec spec,
+                bool doubleBuffered,
+                uint frameId,
+                int activeChunks,
+                int allocatedChunks,
+                long approxDataBytes)
+            {
+                Slot = slot;
+                Key = key;
+                Name = name;
+                Spec = spec;
+                DoubleBuffered = doubleBuffered;
+                FrameId = frameId;
+                ActiveChunks = activeChunks;
+                AllocatedChunks = allocatedChunks;
+                ApproxDataBytes = approxDataBytes;
+            }
+
+            public string DisplayName =>
+                string.IsNullOrWhiteSpace(Name)
+                    ? $"#{Slot} / Key {Key}"
+                    : $"{Name}  —  Key {Key}";
+        }
+
+        public readonly struct ChunkSnapshot
+        {
+            public readonly int Slot;
+            public readonly int2 Coord;
+            public readonly int2 CellBase;
+            public readonly int[] Cells;
+
+            public readonly int MinValue;
+            public readonly int MaxValue;
+            public readonly int NonZeroCells;
+            public readonly long SumValue;
+
+            public ChunkSnapshot(
+                int slot,
+                int2 coord,
+                int2 cellBase,
+                int[] cells,
+                int minValue,
+                int maxValue,
+                int nonZeroCells,
+                long sumValue)
+            {
+                Slot = slot;
+                Coord = coord;
+                CellBase = cellBase;
+                Cells = cells;
+                MinValue = minValue;
+                MaxValue = maxValue;
+                NonZeroCells = nonZeroCells;
+                SumValue = sumValue;
+            }
         }
     }
 }

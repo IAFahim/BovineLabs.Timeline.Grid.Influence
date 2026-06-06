@@ -1,7 +1,6 @@
 using System;
 using BovineLabs.Core.Authoring.EntityCommands;
 using BovineLabs.Timeline.Authoring;
-using BovineLabs.Timeline.Grid.Influence.Data;
 using BovineLabs.Timeline.Grid.Influence.Data.Builders;
 using BovineLabs.Timeline.Physics;
 using Unity.Entities;
@@ -15,12 +14,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
     {
         public GridFieldSchemaObject Field;
         public GridStampSchemaObject Sampler;
-        
+
         public Polarity Polarity = Polarity.Additive;
         public PhysicsForceMode Mode = PhysicsForceMode.Continuous;
-        
-        [Min(0f)]
-        public float Strength = 10f;
+
+        [Min(0f)] public float Strength = 10f;
 
         public override double duration => 1.0;
         public ClipCaps clipCaps => ClipCaps.Blending | ClipCaps.Looping;
@@ -29,13 +27,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         {
             if (Field == null)
             {
-                Debug.LogError($"GridFlowSteeringClip '{name}' has no Field schema assigned. Clip will be skipped.", this);
+                Debug.LogError($"GridFlowSteeringClip '{name}' has no Field schema assigned. Clip will be skipped.",
+                    this);
                 return;
             }
 
             if (Sampler == null)
             {
-                Debug.LogError($"GridFlowSteeringClip '{name}' has no Sampler schema assigned. Clip will be skipped.", this);
+                Debug.LogError($"GridFlowSteeringClip '{name}' has no Sampler schema assigned. Clip will be skipped.",
+                    this);
                 return;
             }
 

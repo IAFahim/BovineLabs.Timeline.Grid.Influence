@@ -11,45 +11,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
         private const string FieldFolder = "Assets/Settings/Schemas/GridFields";
         private const string StampFolder = "Assets/Settings/Schemas/GridStamps";
 
-        private readonly struct FieldPreset
-        {
-            public readonly string Name;
-            public readonly int ChunkPower;
-            public readonly uint RetentionFrames;
-            public readonly bool DoubleBuffered;
-            public readonly int DecayPerMille;
-            public readonly int SpreadDenominator;
-
-            public FieldPreset(string name, int chunkPower, uint retentionFrames, bool doubleBuffered,
-                int decayPerMille, int spreadDenominator)
-            {
-                Name = name;
-                ChunkPower = chunkPower;
-                RetentionFrames = retentionFrames;
-                DoubleBuffered = doubleBuffered;
-                DecayPerMille = decayPerMille;
-                SpreadDenominator = spreadDenominator;
-            }
-        }
-
-        private readonly struct StampPreset
-        {
-            public readonly string Name;
-            public readonly ShapeKind Kind;
-            public readonly int BaseWeight;
-            public readonly int OuterRadius;
-            public readonly int InnerRadius;
-
-            public StampPreset(string name, ShapeKind kind, int baseWeight, int outerRadius, int innerRadius)
-            {
-                Name = name;
-                Kind = kind;
-                BaseWeight = baseWeight;
-                OuterRadius = outerRadius;
-                InnerRadius = innerRadius;
-            }
-        }
-
         private static readonly FieldPreset[] FieldPresets =
         {
             new("ThreatField", 5, 120, true, 60, 4),
@@ -127,6 +88,45 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 EnsureFolder(parent);
 
             AssetDatabase.CreateFolder(parent, leaf);
+        }
+
+        private readonly struct FieldPreset
+        {
+            public readonly string Name;
+            public readonly int ChunkPower;
+            public readonly uint RetentionFrames;
+            public readonly bool DoubleBuffered;
+            public readonly int DecayPerMille;
+            public readonly int SpreadDenominator;
+
+            public FieldPreset(string name, int chunkPower, uint retentionFrames, bool doubleBuffered,
+                int decayPerMille, int spreadDenominator)
+            {
+                Name = name;
+                ChunkPower = chunkPower;
+                RetentionFrames = retentionFrames;
+                DoubleBuffered = doubleBuffered;
+                DecayPerMille = decayPerMille;
+                SpreadDenominator = spreadDenominator;
+            }
+        }
+
+        private readonly struct StampPreset
+        {
+            public readonly string Name;
+            public readonly ShapeKind Kind;
+            public readonly int BaseWeight;
+            public readonly int OuterRadius;
+            public readonly int InnerRadius;
+
+            public StampPreset(string name, ShapeKind kind, int baseWeight, int outerRadius, int innerRadius)
+            {
+                Name = name;
+                Kind = kind;
+                BaseWeight = baseWeight;
+                OuterRadius = outerRadius;
+                InnerRadius = innerRadius;
+            }
         }
     }
 }

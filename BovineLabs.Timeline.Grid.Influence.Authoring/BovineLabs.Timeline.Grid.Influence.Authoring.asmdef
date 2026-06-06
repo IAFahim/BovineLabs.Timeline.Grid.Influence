@@ -12,7 +12,7 @@
     "Unity.Timeline",
     "Unity.Burst",
     "Unity.Collections",
-    "BovineLabs.Timeline.DataBovineLabs.Timeline.Data",
+    "Unity.Transforms",
     "Unity.Entities.Hybrid",
     "BovineLabs.Timeline.EntityLinks.Authoring",
     "BovineLabs.Reaction.Data",
@@ -20,7 +20,10 @@
     "BovineLabs.Timeline.Physics",
     "BovineLabs.Timeline.Physics.Data",
     "BovineLabs.Timeline.Physics.Authoring",
-    "BovineLabs.Timeline.Data"
+    "BovineLabs.Timeline.Data",
+    "BovineLabs.Timeline.EntityLinks.Data",
+    "BovineLabs.Timeline.EntityLinks",
+    "BovineLabs.Timeline"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

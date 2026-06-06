@@ -26,8 +26,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         [ConfigVar("influencegizmo.draw-enabled", false, "Enable the grid influence gizmo.")]
         public static readonly SharedStatic<bool> Enabled = SharedStatic<bool>.GetOrCreate<Tags.Enabled>();
 
-        [ConfigVar("influencegizmo.draw-stamps", true, "Draw individual influence stamps as wireframes.")]
+        [ConfigVar("influencegizmo.draw-stamps", false, "Draw individual influence stamps as wireframes.")]
         public static readonly SharedStatic<bool> DrawStamps = SharedStatic<bool>.GetOrCreate<Tags.DrawStamps>();
+
+        [ConfigVar("influencegizmo.draw-stamp-labels", false, "Draw stamp weight labels.")]
+        public static readonly SharedStatic<bool> DrawStampLabels = SharedStatic<bool>.GetOrCreate<Tags.DrawStampLabels>();
 
         [ConfigVar("influencegizmo.draw-grid", true, "Draw active chunk boundaries.")]
         public static readonly SharedStatic<bool> DrawGrid = SharedStatic<bool>.GetOrCreate<Tags.DrawGrid>();
@@ -59,6 +62,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         {
             public struct Enabled { }
             public struct DrawStamps { }
+            public struct DrawStampLabels { }
             public struct DrawGrid { }
             public struct DrawValues { }
             public struct DrawValueText { }
@@ -117,6 +121,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     Basis = basis,
                     CameraCulling = cameraCulling,
                     CullToCamera = cullToCamera,
+                    DrawStampLabels = InfluenceDebugSystemConfig.DrawStampLabels.Data,
                     LocalToWorldLookup = state.GetUnsafeComponentLookup<LocalToWorld>(true),
                     TargetsLookup = state.GetUnsafeComponentLookup<Targets>(true),
                     LinkSources = state.GetUnsafeComponentLookup<EntityLinkSource>(true),
@@ -175,11 +180,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             public GridBasis Basis;
             public CameraCulling CameraCulling;
             public bool CullToCamera;
+            public bool DrawStampLabels;
 
             [ReadOnly] public UnsafeComponentLookup<LocalToWorld> LocalToWorldLookup;
             [ReadOnly] public UnsafeComponentLookup<Targets> TargetsLookup;
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> LinkSources;
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Links;
+
+            private const float RenderHeight = 0.07f;
 
             public void Execute(in TrackBinding binding, in InfluenceClipData clip, in ClipWeight weight)
             {
@@ -210,26 +218,18 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 color.a *= 0.8f;
 
                 var origin = localToWorld.Position + math.rotate(localToWorld.Rotation, clip.LocalOffset);
-                var heightOffset = math.dot(origin, Basis.Normal);
                 var projected = Basis.ToGridSpace(origin);
 
                 var gridOrigin = new int2(
                     (int)math.floor(projected.x / CellSize),
                     (int)math.floor(projected.y / CellSize));
 
-                // Cull stamps outside camera frustum
-                if (CullToCamera)
-                {
-                    var stampGrid = new float2(gridOrigin.x, gridOrigin.y) * CellSize;
-                    var margin = math.max(0.1f, CellSize);
-                    var aabb = new AABB
-                    {
-                        Center = Basis.ToWorldSpace(stampGrid + CellSize * 0.5f, heightOffset),
-                        Extents = new float3(margin, margin, margin),
-                    };
-                    if (!CameraCulling.AnyIntersect(aabb))
-                        return;
-                }
+                // Draw stamps on the same debug plane as the grid, not at entity height.
+                var heightOffset = RenderHeight;
+
+                // Cull stamps whose shape bounds are outside the camera frustum.
+                if (!IsStampVisible(gridOrigin, shape, heightOffset))
+                    return;
 
                 var snappedGrid = new float2(
                     gridOrigin.x * CellSize + CellSize * 0.5f,
@@ -265,10 +265,82 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
                 Drawer.Point(snappedWorld, 0.1f * CellSize, color);
 
-                FixedString32Bytes label = default;
-                label.Append((FixedString32Bytes)"Wt: ");
-                label.Append(shape.Weight);
-                Drawer.Text32(snappedWorld + Basis.Normal * 0.3f, label, color, 10f);
+                if (DrawStampLabels)
+                {
+                    FixedString32Bytes label = default;
+                    label.Append((FixedString32Bytes)"Wt: ");
+                    label.Append(shape.Weight);
+                    Drawer.Text32(snappedWorld + Basis.Normal * 0.3f, label, color, 10f);
+                }
+            }
+
+            private bool IsStampVisible(int2 gridOrigin, InfluenceShape shape, float heightOffset)
+            {
+                if (!CullToCamera)
+                    return true;
+
+                if (!TryGetShapeBounds(shape, out var minCell, out var maxCell))
+                    return false;
+
+                var minGrid = new float2(gridOrigin.x + minCell.x, gridOrigin.y + minCell.y) * CellSize;
+                var maxGrid = new float2(gridOrigin.x + maxCell.x, gridOrigin.y + maxCell.y) * CellSize;
+
+                var p0 = Basis.ToWorldSpace(minGrid, heightOffset);
+                var p1 = Basis.ToWorldSpace(new float2(maxGrid.x, minGrid.y), heightOffset);
+                var p2 = Basis.ToWorldSpace(maxGrid, heightOffset);
+                var p3 = Basis.ToWorldSpace(new float2(minGrid.x, maxGrid.y), heightOffset);
+
+                var min = math.min(math.min(p0, p1), math.min(p2, p3));
+                var max = math.max(math.max(p0, p1), math.max(p2, p3));
+
+                var margin = math.max(0.1f, CellSize);
+
+                var aabb = new AABB
+                {
+                    Center = (min + max) * 0.5f,
+                    Extents = ((max - min) * 0.5f) + new float3(margin),
+                };
+
+                return CameraCulling.AnyIntersect(aabb);
+            }
+
+            private static bool TryGetShapeBounds(InfluenceShape shape, out int2 minCell, out int2 maxCell)
+            {
+                switch (shape.Kind)
+                {
+                    case ShapeKind.SolidRect:
+                        minCell = shape.RectMin;
+                        maxCell = shape.RectMin + shape.RectSize;
+                        return shape.RectSize.x > 0 && shape.RectSize.y > 0;
+
+                    case ShapeKind.RectShell:
+                        minCell = shape.ShellMin;
+                        maxCell = shape.ShellMin + shape.ShellSize;
+                        return shape.ShellSize.x > 0 && shape.ShellSize.y > 0;
+
+                    case ShapeKind.Disc:
+                        minCell = shape.DiscCenter - shape.DiscRadius;
+                        maxCell = shape.DiscCenter + shape.DiscRadius + 1;
+                        return shape.DiscRadius >= 0;
+
+                    case ShapeKind.Annulus:
+                        minCell = shape.AnnulusCenter - shape.AnnulusOuterRadius;
+                        maxCell = shape.AnnulusCenter + shape.AnnulusOuterRadius + 1;
+                        return shape.AnnulusOuterRadius >= 0;
+
+                    case ShapeKind.Capsule:
+                    {
+                        var r = shape.CapsuleRadius;
+                        minCell = math.min(shape.CapsuleStart, shape.CapsuleEnd) - r;
+                        maxCell = math.max(shape.CapsuleStart, shape.CapsuleEnd) + r + 1;
+                        return r >= 0;
+                    }
+
+                    default:
+                        minCell = default;
+                        maxCell = default;
+                        return false;
+                }
             }
 
             private void DrawRect(float3 localOrigin, int2 min, int2 size, Color color, float heightOffset)

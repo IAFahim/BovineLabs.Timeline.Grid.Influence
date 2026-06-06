@@ -11,6 +11,7 @@
     "Unity.Collections",
     "Unity.Entities",
     "Unity.Mathematics",
+    "Unity.Mathematics.Extensions",
     "Unity.Transforms",
     "Unity.Jobs",
     "BovineLabs.Reaction.Data",

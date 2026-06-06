@@ -32,8 +32,17 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         [ConfigVar("influencegizmo.draw-grid", true, "Draw active chunk boundaries.")]
         public static readonly SharedStatic<bool> DrawGrid = SharedStatic<bool>.GetOrCreate<Tags.DrawGrid>();
 
-        [ConfigVar("influencegizmo.draw-values", true, "Draw accumulated influence values.")]
+        [ConfigVar("influencegizmo.draw-values", true, "Draw accumulated influence values inside the camera frustum.")]
         public static readonly SharedStatic<bool> DrawValues = SharedStatic<bool>.GetOrCreate<Tags.DrawValues>();
+
+        [ConfigVar("influencegizmo.draw-value-text", false, "Draw numeric labels for influence cells. Very expensive on large worlds.")]
+        public static readonly SharedStatic<bool> DrawValueText = SharedStatic<bool>.GetOrCreate<Tags.DrawValueText>();
+
+        [ConfigVar("influencegizmo.cull-to-camera", true, "Only draw influence debug chunks intersecting the active camera frustum.")]
+        public static readonly SharedStatic<bool> CullToCamera = SharedStatic<bool>.GetOrCreate<Tags.CullToCamera>();
+
+        [ConfigVar("influencegizmo.value-stride", 1, "Draw one influence sample every N cells.")]
+        public static readonly SharedStatic<int> ValueStride = SharedStatic<int>.GetOrCreate<Tags.ValueStride>();
 
         [ConfigVar("influencegizmo.positive-color", 0.2f, 0.8f, 0.4f, 1.0f, "Positive influence color.")]
         public static readonly SharedStatic<Color>
@@ -48,33 +57,16 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
         private struct Tags
         {
-            public struct Enabled
-            {
-            }
-
-            public struct DrawStamps
-            {
-            }
-
-            public struct DrawGrid
-            {
-            }
-
-            public struct DrawValues
-            {
-            }
-
-            public struct PositiveColor
-            {
-            }
-
-            public struct NegativeColor
-            {
-            }
-
-            public struct GridColor
-            {
-            }
+            public struct Enabled { }
+            public struct DrawStamps { }
+            public struct DrawGrid { }
+            public struct DrawValues { }
+            public struct DrawValueText { }
+            public struct CullToCamera { }
+            public struct ValueStride { }
+            public struct PositiveColor { }
+            public struct NegativeColor { }
+            public struct GridColor { }
         }
     }
 
@@ -104,7 +96,16 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 return;
 
             var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
+            var cellSize = math.max(0.0001f, settings.CellSize);
             var basis = new GridBasis(settings.PlaneNormal);
+
+            var cullToCamera = InfluenceDebugSystemConfig.CullToCamera.Data;
+            var cameraCulling = SystemAPI.GetSingleton<DrawSystem.Singleton>().CameraCulling;
+
+            // CameraCulling.AnyIntersect(default) returns false.
+            // If Quill hasn't populated camera data yet, skip to avoid drawing the whole world.
+            if (cullToCamera && cameraCulling.IsDefault)
+                return;
 
             if (InfluenceDebugSystemConfig.DrawStamps.Data && !_stampQuery.IsEmpty)
                 state.Dependency = new DrawStampsJob
@@ -112,8 +113,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     Drawer = drawer,
                     PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
                     NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
-                    CellSize = settings.CellSize,
+                    CellSize = cellSize,
                     Basis = basis,
+                    CameraCulling = cameraCulling,
+                    CullToCamera = cullToCamera,
                     LocalToWorldLookup = state.GetUnsafeComponentLookup<LocalToWorld>(true),
                     TargetsLookup = state.GetUnsafeComponentLookup<Targets>(true),
                     LinkSources = state.GetUnsafeComponentLookup<EntityLinkSource>(true),
@@ -141,10 +144,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                         PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
                         NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
                         GridColor = InfluenceDebugSystemConfig.GridColor.Data,
-                        CellSize = settings.CellSize,
+                        CellSize = cellSize,
                         Basis = basis,
                         DrawGrid = drawGrid,
                         DrawValues = drawValues,
+                        DrawValueText = InfluenceDebugSystemConfig.DrawValueText.Data,
+                        ValueStride = math.max(1, InfluenceDebugSystemConfig.ValueStride.Data),
+                        CameraCulling = cameraCulling,
+                        CullToCamera = cullToCamera,
                         ActiveSlots = field.ActiveSlotsList,
                         CoordBySlot = field.CoordBySlotList,
                         Data = field.DataList,
@@ -166,6 +173,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             public Color NegativeColor;
             public float CellSize;
             public GridBasis Basis;
+            public CameraCulling CameraCulling;
+            public bool CullToCamera;
 
             [ReadOnly] public UnsafeComponentLookup<LocalToWorld> LocalToWorldLookup;
             [ReadOnly] public UnsafeComponentLookup<Targets> TargetsLookup;
@@ -208,6 +217,20 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     (int)math.floor(projected.x / CellSize),
                     (int)math.floor(projected.y / CellSize));
 
+                // Cull stamps outside camera frustum
+                if (CullToCamera)
+                {
+                    var stampGrid = new float2(gridOrigin.x, gridOrigin.y) * CellSize;
+                    var margin = math.max(0.1f, CellSize);
+                    var aabb = new AABB
+                    {
+                        Center = Basis.ToWorldSpace(stampGrid + CellSize * 0.5f, heightOffset),
+                        Extents = new float3(margin, margin, margin),
+                    };
+                    if (!CameraCulling.AnyIntersect(aabb))
+                        return;
+                }
+
                 var snappedGrid = new float2(
                     gridOrigin.x * CellSize + CellSize * 0.5f,
                     gridOrigin.y * CellSize + CellSize * 0.5f);
@@ -233,7 +256,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                         DrawDisc(snappedWorld, shape.AnnulusCenter, shape.AnnulusOuterRadius, color, heightOffset);
                         if (shape.AnnulusInnerRadius >= 0)
                             DrawDisc(snappedWorld, shape.AnnulusCenter, shape.AnnulusInnerRadius, color, heightOffset);
-
                         break;
                     case ShapeKind.Capsule:
                         DrawCapsule(snappedWorld, shape.CapsuleStart, shape.CapsuleEnd, shape.CapsuleRadius, color,
@@ -310,44 +332,46 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             public GridBasis Basis;
             public bool DrawGrid;
             public bool DrawValues;
+            public bool DrawValueText;
+            public int ValueStride;
+            public CameraCulling CameraCulling;
+            public bool CullToCamera;
 
             [ReadOnly] public NativeList<int> ActiveSlots;
             [ReadOnly] public NativeList<int2> CoordBySlot;
             [ReadOnly] public NativeList<int> Data;
             public GridSpec Spec;
 
+            private const float RenderHeight = 0.05f;
+
             public void Execute()
             {
-                const float renderHeight = 0.05f;
                 var chunkSize = Spec.ChunkSize;
                 var stride = Spec.Stride;
                 var elements = Spec.ElementsPerChunk;
+                var step = math.max(1, ValueStride);
 
                 for (var i = 0; i < ActiveSlots.Length; i++)
                 {
                     var slot = ActiveSlots[i];
                     var coord = CoordBySlot[slot];
+
+                    // Cull entire chunks outside the camera frustum before doing any work.
+                    if (!IsChunkVisible(coord))
+                        continue;
+
                     var baseIndex = slot * elements;
                     var chunkOrigin = new float2(coord.x * chunkSize, coord.y * chunkSize) * CellSize;
 
                     if (DrawGrid)
                     {
-                        var edge = chunkSize * CellSize;
-                        var p0 = Basis.ToWorldSpace(chunkOrigin, renderHeight);
-                        var p1 = Basis.ToWorldSpace(chunkOrigin + new float2(edge, 0), renderHeight);
-                        var p2 = Basis.ToWorldSpace(chunkOrigin + new float2(edge, edge), renderHeight);
-                        var p3 = Basis.ToWorldSpace(chunkOrigin + new float2(0, edge), renderHeight);
-
-                        Drawer.Line(p0, p1, GridColor);
-                        Drawer.Line(p1, p2, GridColor);
-                        Drawer.Line(p2, p3, GridColor);
-                        Drawer.Line(p3, p0, GridColor);
+                        DrawChunkBounds(chunkOrigin, chunkSize);
                     }
 
                     if (!DrawValues) continue;
 
-                    for (var y = 0; y < chunkSize; y++)
-                    for (var x = 0; x < chunkSize; x++)
+                    for (var y = 0; y < chunkSize; y += step)
+                    for (var x = 0; x < chunkSize; x += step)
                     {
                         var value = Data[baseIndex + y * stride + x];
                         if (value == 0) continue;
@@ -359,20 +383,66 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                         fill.a *= math.clamp(math.abs(value) / 10f, 0.15f, 0.75f);
 
                         var pad = CellSize * 0.05f;
-                        var c0 = Basis.ToWorldSpace(cellGrid + new float2(pad, pad), renderHeight);
-                        var c1 = Basis.ToWorldSpace(cellGrid + new float2(CellSize - pad, pad), renderHeight);
-                        var c2 = Basis.ToWorldSpace(cellGrid + new float2(CellSize - pad, CellSize - pad),
-                            renderHeight);
-                        var c3 = Basis.ToWorldSpace(cellGrid + new float2(pad, CellSize - pad), renderHeight);
+                        var c0 = Basis.ToWorldSpace(cellGrid + new float2(pad, pad), RenderHeight);
+                        var c1 = Basis.ToWorldSpace(cellGrid + new float2(CellSize - pad, pad), RenderHeight);
+                        var c2 = Basis.ToWorldSpace(cellGrid + new float2(CellSize - pad, CellSize - pad), RenderHeight);
+                        var c3 = Basis.ToWorldSpace(cellGrid + new float2(pad, CellSize - pad), RenderHeight);
 
                         Drawer.Quad(c0, c1, c2, c3, fill);
 
+                        if (!DrawValueText)
+                            continue;
+
                         FixedString32Bytes text = default;
                         text.Append(value);
-                        Drawer.Text32(Basis.ToWorldSpace(cellGrid + new float2(CellSize * 0.5f), renderHeight), text,
-                            baseColor, 12f);
+                        Drawer.Text32(
+                            Basis.ToWorldSpace(cellGrid + new float2(CellSize * 0.5f), RenderHeight),
+                            text, baseColor, 12f);
                     }
                 }
+            }
+
+            private bool IsChunkVisible(int2 coord)
+            {
+                if (!CullToCamera)
+                    return true;
+
+                var chunkSize = Spec.ChunkSize;
+                var edge = chunkSize * CellSize;
+
+                var origin = new float2(coord.x * chunkSize, coord.y * chunkSize) * CellSize;
+
+                var p0 = Basis.ToWorldSpace(origin, RenderHeight);
+                var p1 = Basis.ToWorldSpace(origin + new float2(edge, 0f), RenderHeight);
+                var p2 = Basis.ToWorldSpace(origin + new float2(edge, edge), RenderHeight);
+                var p3 = Basis.ToWorldSpace(origin + new float2(0f, edge), RenderHeight);
+
+                var min = math.min(math.min(p0, p1), math.min(p2, p3));
+                var max = math.max(math.max(p0, p1), math.max(p2, p3));
+
+                var margin = math.max(0.1f, CellSize);
+
+                var aabb = new AABB
+                {
+                    Center = (min + max) * 0.5f,
+                    Extents = ((max - min) * 0.5f) + new float3(margin),
+                };
+
+                return CameraCulling.AnyIntersect(aabb);
+            }
+
+            private void DrawChunkBounds(float2 chunkOrigin, int chunkSize)
+            {
+                var edge = chunkSize * CellSize;
+                var p0 = Basis.ToWorldSpace(chunkOrigin, RenderHeight);
+                var p1 = Basis.ToWorldSpace(chunkOrigin + new float2(edge, 0), RenderHeight);
+                var p2 = Basis.ToWorldSpace(chunkOrigin + new float2(edge, edge), RenderHeight);
+                var p3 = Basis.ToWorldSpace(chunkOrigin + new float2(0, edge), RenderHeight);
+
+                Drawer.Line(p0, p1, GridColor);
+                Drawer.Line(p1, p2, GridColor);
+                Drawer.Line(p2, p3, GridColor);
+                Drawer.Line(p3, p0, GridColor);
             }
         }
     }

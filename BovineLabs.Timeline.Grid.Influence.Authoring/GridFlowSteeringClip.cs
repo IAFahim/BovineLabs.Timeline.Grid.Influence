@@ -2,6 +2,7 @@ using System;
 using BovineLabs.Core.Authoring.EntityCommands;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.Grid.Influence.Data;
+using BovineLabs.Timeline.Grid.Influence.Data.Builders;
 using BovineLabs.Timeline.Physics;
 using Unity.Entities;
 using UnityEngine;
@@ -41,8 +42,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             context.Baker.DependsOn(Field);
             context.Baker.DependsOn(Sampler);
 
-            var commands = new BakerCommands(context.Baker, clipEntity);
-
             if (context.Binding != null && context.Binding.Target != Entity.Null)
             {
                 context.Baker.AddTransformUsageFlags(context.Binding.Target, TransformUsageFlags.Dynamic);
@@ -51,17 +50,16 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
             var shape = Sampler.BuildShape(1f);
 
-            commands.AddComponent(new GridFlowSteeringAnimated
+            var builder = new GridFlowSteeringBuilder
             {
-                AuthoredData = new GridFlowSteeringData
-                {
-                    FieldKey = Field.Id,
-                    SamplerShape = shape,
-                    Polarity = Polarity.Sign(),
-                    Mode = Mode,
-                    Strength = Strength
-                }
-            });
+                FieldKey = Field.Id,
+                SamplerShape = shape,
+                Polarity = Polarity.Sign(),
+                Mode = Mode,
+                Strength = Strength
+            };
+            var commands = new BakerCommands(context.Baker, clipEntity);
+            builder.ApplyTo(ref commands);
 
             base.Bake(clipEntity, context);
         }

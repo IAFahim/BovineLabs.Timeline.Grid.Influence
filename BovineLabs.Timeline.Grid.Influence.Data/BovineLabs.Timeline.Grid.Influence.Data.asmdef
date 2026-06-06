@@ -7,6 +7,8 @@
     "Unity.Entities",
     "Unity.Jobs",
     "Unity.Mathematics",
+    "Unity.Physics",
+    "BovineLabs.Core",
     "BovineLabs.Reaction.Data",
     "BovineLabs.Timeline",
     "BovineLabs.Timeline.Data",

@@ -5,6 +5,7 @@ using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
 using BovineLabs.Timeline.Grid.Influence.Data;
+using BovineLabs.Timeline.Grid.Influence.Data.Builders;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.Timeline;
@@ -55,16 +56,16 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             if (shapes.Count == 0)
                 return;
 
-            var commands = new BakerCommands(context.Baker, clipEntity);
-
-            commands.AddComponent(new InfluenceClipData
+            var builder = new GridInfluenceBuilder
             {
                 FieldKey = Field.Id,
                 Shape = shapes[0],
                 LocalOffset = LocalOffset,
                 OriginTarget = originTarget,
                 OriginLinkKey = ResolveLinkKey()
-            });
+            };
+            var commands = new BakerCommands(context.Baker, clipEntity);
+            builder.ApplyTo(ref commands);
 
             var buffer = commands.AddBuffer<InfluenceStampElement>();
             for (var i = 1; i < shapes.Count; i++)

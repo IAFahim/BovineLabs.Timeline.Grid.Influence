@@ -1,3 +1,4 @@
+using Unity.Burst;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Collections;
 using Unity.Entities;
@@ -76,7 +77,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
             var combinedWriters = state.Dependency;
             for (var i = 0; i < reg.Count; i++)
                 combinedWriters = JobHandle.CombineDependencies(combinedWriters, reg.Slot(i).WriterDependency);
-            combinedWriters.Complete();
 
             JobHandle combined = default;
             for (var i = 0; i < reg.Count; i++)
@@ -97,9 +97,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
 
                 JobHandle h;
                 if (pair.DoubleBuffered)
-                    h = pair.Back.Schedule(stampsMap.AsReadOnly(), i, default, pair.PendingStencil);
+                    h = pair.Back.Schedule(stampsMap.AsReadOnly(), i, combinedWriters, pair.PendingStencil);
                 else
-                    h = pair.Front.Schedule(stampsMap.AsReadOnly(), i, default, pair.PendingStencil);
+                    h = pair.Front.Schedule(stampsMap.AsReadOnly(), i, combinedWriters, pair.PendingStencil);
 
                 pair.Swap();
 
@@ -109,9 +109,17 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
                 combined = JobHandle.CombineDependencies(combined, h);
             }
 
-            combined.Complete();
-            state.Dependency = combined;
-            stampsMap.Clear();
+            state.Dependency = new ClearMapJob { Map = stampsMap }.Schedule(combined);
+        }
+
+        [BurstCompile]
+        private struct ClearMapJob : IJob
+        {
+            public NativeParallelMultiHashMap<int, Stamp> Map;
+            public void Execute()
+            {
+                Map.Clear();
+            }
         }
     }
 }

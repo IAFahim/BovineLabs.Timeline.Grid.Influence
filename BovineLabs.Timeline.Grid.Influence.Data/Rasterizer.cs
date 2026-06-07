@@ -117,6 +117,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     return new CellRect(math.min(a, b) - new int2(r, r), math.max(a, b) + new int2(r + 1, r + 1));
                 }
 
+                case ShapeKind.Sector:
+                {
+                    if (shape.SectorRadius < 0) return CellRect.Empty;
+
+                    var center = origin + shape.SectorCenter;
+                    var r = shape.SectorRadius;
+                    return new CellRect(center - new int2(r, r), center + new int2(r + 1, r + 1));
+                }
+
                 default:
                     return CellRect.Empty;
             }
@@ -180,6 +189,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     return IntegerMath.ClampToInt(spanY + 2L * shape.ThickLineRadius + 3L);
                 }
 
+                case ShapeKind.Sector:
+                    return shape.SectorRadius < 0 ? 0 : IntegerMath.ClampToInt(2L * shape.SectorRadius + 1L);
+
                 default:
                     return 0;
             }
@@ -229,6 +241,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 case ShapeKind.ThickLine:
                     EmitCapsule(ref sink, origin + shape.ThickLineStart, origin + shape.ThickLineEnd,
                         shape.ThickLineRadius, weight);
+                    break;
+
+                case ShapeKind.Sector:
+                    EmitSector(ref sink, origin + shape.SectorCenter, shape.SectorRadius,
+                        shape.SectorDir0, shape.SectorDir1, weight);
                     break;
             }
         }
@@ -460,6 +477,40 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
                 sink.Push(new WeightedRect(
                     new CellRect(new int2(x0, y), new int2(x1, y + 1)),
+                    weight));
+            }
+        }
+
+        private static void EmitSector(ref SpanSink sink, int2 center, int radius, int2 d0, int2 d1, int weight)
+        {
+            if (radius < 0) return;
+
+            var r2 = (long)radius * radius;
+
+            for (var dy = -radius; dy <= radius; dy++)
+            {
+                var rem = r2 - (long)dy * dy;
+                if (rem < 0) continue;
+
+                var half = IntegerMath.FloorSqrt(rem);
+                var xlo = -half;
+                var xhi = half;
+
+                var c0 = (long)d0.x * dy;
+                if (d0.y > 0) xhi = math.min(xhi, (int)IntegerMath.FloorDiv(c0, d0.y));
+                else if (d0.y < 0) xlo = math.max(xlo, (int)IntegerMath.CeilDiv(c0, d0.y));
+                else if (c0 < 0) continue;
+
+                var c1 = (long)d1.x * dy;
+                if (d1.y > 0) xlo = math.max(xlo, (int)IntegerMath.CeilDiv(c1, d1.y));
+                else if (d1.y < 0) xhi = math.min(xhi, (int)IntegerMath.FloorDiv(c1, d1.y));
+                else if (-(long)dy * d1.x < 0) continue;
+
+                if (xlo > xhi) continue;
+
+                var y = center.y + dy;
+                sink.Push(new WeightedRect(
+                    new CellRect(new int2(center.x + xlo, y), new int2(center.x + xhi + 1, y + 1)),
                     weight));
             }
         }

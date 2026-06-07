@@ -49,6 +49,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public Vector2Int ThickLineEnd = new(5, 0);
         public int ThickLineRadius = 1;
 
+        [Header("Sector")] public Vector2Int SectorCenter = Vector2Int.zero;
+
+        public int SectorRadius = 6;
+        public float SectorFacingDegrees = 90f;
+        [Range(1f, 90f)] public float SectorHalfAngleDegrees = 30f;
+
+        private const int RayScale = 1024;
+
         public ushort Id => (ushort)id;
 
         private void OnValidate()
@@ -63,6 +71,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             RoundedRectSize = new Vector2Int(math.max(0, RoundedRectSize.x), math.max(0, RoundedRectSize.y));
             RoundedRectRadius = math.max(0, RoundedRectRadius);
             ThickLineRadius = math.max(0, ThickLineRadius);
+            SectorRadius = math.max(0, SectorRadius);
+            SectorHalfAngleDegrees = math.clamp(SectorHalfAngleDegrees, 1f, 90f);
         }
 
         int IUID.ID
@@ -87,6 +97,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             int2 roundedRectSize = new(RoundedRectSize.x, RoundedRectSize.y);
             int2 thickLineStart = new(ThickLineStart.x, ThickLineStart.y);
             int2 thickLineEnd = new(ThickLineEnd.x, ThickLineEnd.y);
+            int2 sectorCenter = new(SectorCenter.x, SectorCenter.y);
 
             return Kind switch
             {
@@ -100,8 +111,17 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 ShapeKind.RoundedRect => InfluenceShape.RoundedRect(roundedRectMin, roundedRectSize, RoundedRectRadius,
                     weight),
                 ShapeKind.ThickLine => InfluenceShape.ThickLine(thickLineStart, thickLineEnd, ThickLineRadius, weight),
+                ShapeKind.Sector => InfluenceShape.Sector(sectorCenter, SectorRadius,
+                    Ray(SectorFacingDegrees - SectorHalfAngleDegrees),
+                    Ray(SectorFacingDegrees + SectorHalfAngleDegrees), weight),
                 _ => InfluenceShape.Disc(discCenter, DiscRadius, weight)
             };
+        }
+
+        private static int2 Ray(float degrees)
+        {
+            math.sincos(math.radians(degrees), out var sin, out var cos);
+            return new int2((int)math.round(RayScale * cos), (int)math.round(RayScale * sin));
         }
     }
 }

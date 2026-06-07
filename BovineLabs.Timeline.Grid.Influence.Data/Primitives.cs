@@ -83,5 +83,21 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             return ClampToInt((long)a + b);
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static long FloorDiv(long a, long b)
+        {
+            var q = a / b;
+            if (a % b != 0 && (a < 0) != (b < 0)) q--;
+            return q;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static long CeilDiv(long a, long b)
+        {
+            var q = a / b;
+            if (a % b != 0 && (a < 0) == (b < 0)) q++;
+            return q;
+        }
     }
 }

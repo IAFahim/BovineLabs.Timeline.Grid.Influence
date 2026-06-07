@@ -296,6 +296,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                         DrawCapsule(snappedWorld, shape.CapsuleStart, shape.CapsuleEnd, shape.CapsuleRadius, color,
                             heightOffset);
                         break;
+
+                    case ShapeKind.Sector:
+                        DrawDisc(snappedWorld, shape.SectorCenter, shape.SectorRadius, color, heightOffset);
+                        break;
                 }
 
                 Drawer.Point(snappedWorld, 0.1f * CellSize, color);
@@ -368,6 +372,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                         var r = shape.CapsuleRadius;
                         minCell = math.min(shape.CapsuleStart, shape.CapsuleEnd) - r;
                         maxCell = math.max(shape.CapsuleStart, shape.CapsuleEnd) + r + 1;
+                        return r >= 0;
+                    }
+
+                    case ShapeKind.Sector:
+                    {
+                        var r = shape.SectorRadius;
+                        minCell = shape.SectorCenter - r;
+                        maxCell = shape.SectorCenter + r + 1;
                         return r >= 0;
                     }
 

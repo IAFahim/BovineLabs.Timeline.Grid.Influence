@@ -41,6 +41,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 case ShapeKind.RoundedRect:
                     return HalfMinExtent(shape.RoundedRectSize);
 
+                case ShapeKind.Sector:
+                    return math.max(0, shape.SectorRadius);
+
                 default:
                     return 0;
             }

@@ -67,6 +67,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 case ShapeKind.ThickLine:
                     return InfluenceShape.ThickLine(RotatePoint(s.ThickLineStart, q), RotatePoint(s.ThickLineEnd, q),
                         s.ThickLineRadius, s.Weight);
+                case ShapeKind.Sector:
+                    return InfluenceShape.Sector(RotatePoint(s.SectorCenter, q), s.SectorRadius,
+                        RotatePoint(s.SectorDir0, q), RotatePoint(s.SectorDir1, q), s.Weight);
                 default:
                     return s;
             }

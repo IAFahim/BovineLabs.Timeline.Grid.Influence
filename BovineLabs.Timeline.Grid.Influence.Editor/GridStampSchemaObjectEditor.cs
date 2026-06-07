@@ -124,6 +124,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             SetVisible(nameof(GridStampSchemaObject.ThickLineStart), kind == ShapeKind.ThickLine);
             SetVisible(nameof(GridStampSchemaObject.ThickLineEnd), kind == ShapeKind.ThickLine);
             SetVisible(nameof(GridStampSchemaObject.ThickLineRadius), kind == ShapeKind.ThickLine);
+
+            SetVisible(nameof(GridStampSchemaObject.SectorCenter), kind == ShapeKind.Sector);
+            SetVisible(nameof(GridStampSchemaObject.SectorRadius), kind == ShapeKind.Sector);
+            SetVisible(nameof(GridStampSchemaObject.SectorFacingDegrees), kind == ShapeKind.Sector);
+            SetVisible(nameof(GridStampSchemaObject.SectorHalfAngleDegrees), kind == ShapeKind.Sector);
         }
 
         private void SetVisible(string propertyName, bool visible)

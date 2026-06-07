@@ -32,6 +32,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     return InfluenceShape.Ellipse(s.EllipseCenter, s.EllipseRadii - one, s.Weight);
                 case ShapeKind.ThickLine:
                     return InfluenceShape.ThickLine(s.ThickLineStart, s.ThickLineEnd, s.ThickLineRadius - d, s.Weight);
+                case ShapeKind.Sector:
+                    return InfluenceShape.Sector(s.SectorCenter, s.SectorRadius - d, s.SectorDir0, s.SectorDir1,
+                        s.Weight);
                 default:
                     return s;
             }

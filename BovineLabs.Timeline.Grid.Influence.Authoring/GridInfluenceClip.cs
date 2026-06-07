@@ -6,6 +6,7 @@ using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using BovineLabs.Timeline.Grid.Influence.Data.Builders;
+using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.Timeline;
@@ -20,6 +21,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public GridStampSchemaObject Stamp;
 
         public GridStampSchemaObject[] ExtraStamps = Array.Empty<GridStampSchemaObject>();
+
+        public GridCompositeSchemaObject Composite;
 
         [Header("Semantics")] public GridFieldCategory Category = GridFieldCategory.Generic;
 
@@ -51,15 +54,27 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             DependOnStamps(context);
             BindOriginTransform(context);
 
+            // Build the composite blob if a composite schema is assigned.
+            var compositeBlob = default(BlobAssetReference<CompositeShapeBlob>);
+            if (Composite != null)
+            {
+                context.Baker.DependsOn(Composite);
+                if (Composite.TryBuild(out compositeBlob))
+                    context.Baker.AddBlobAsset(ref compositeBlob, out _);
+                else
+                    compositeBlob = default;
+            }
+
             var shapes = new List<InfluenceShape>(1 + (ExtraStamps?.Length ?? 0));
             GridInfluenceExpansion.Collect(this, shapes);
-            if (shapes.Count == 0)
+            if (shapes.Count == 0 && !compositeBlob.IsCreated)
                 return;
 
             var builder = new GridInfluenceBuilder
             {
                 FieldKey = Field.Id,
-                Shape = shapes[0],
+                Shape = shapes.Count > 0 ? shapes[0] : default,
+                Composite = compositeBlob,
                 LocalOffset = LocalOffset,
                 OriginTarget = originTarget,
                 OriginLinkKey = ResolveLinkKey()

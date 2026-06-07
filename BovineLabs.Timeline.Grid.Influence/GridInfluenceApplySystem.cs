@@ -98,7 +98,17 @@ namespace BovineLabs.Timeline.Grid.Influence
                     (int)math.floor(projected.x / CellSize),
                     (int)math.floor(projected.y / CellSize));
 
-                Emit(slotIndex, clip.Shape, weight.Value, origin);
+                if (clip.Composite.IsCreated)
+                {
+                    ref var layers = ref clip.Composite.Value.Layers;
+                    for (var i = 0; i < layers.Length; i++)
+                        Emit(slotIndex, layers[i], weight.Value, origin);
+                }
+                else
+                {
+                    Emit(slotIndex, clip.Shape, weight.Value, origin);
+                }
+
                 for (var i = 0; i < extras.Length; i++)
                     Emit(slotIndex, extras[i].Shape, weight.Value, origin);
             }

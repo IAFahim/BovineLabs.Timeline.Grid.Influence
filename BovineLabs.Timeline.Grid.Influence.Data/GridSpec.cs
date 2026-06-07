@@ -29,7 +29,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             var log2 = math.clamp(chunkSizePowerOfTwo, 1, 8);
             var chunkSize = 1 << log2;
             var dimension = chunkSize + SeamColumns;
-            var alignment = math.ceilpow2(math.max(1, strideAlignment));
+            var alignment = math.ceilpow2(math.max(8, strideAlignment));
             var alignMask = alignment - 1;
             var stride = (dimension + alignMask) & ~alignMask;
             var elementsPerChunk = stride * dimension;

@@ -8,6 +8,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
     {
         public ushort FieldKey;
         public InfluenceShape Shape;
+        public BlobAssetReference<CompositeShapeBlob> Composite;
         public float3 LocalOffset;
 
         public Target OriginTarget;

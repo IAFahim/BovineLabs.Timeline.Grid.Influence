@@ -30,7 +30,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         public static readonly SharedStatic<bool> DrawStamps = SharedStatic<bool>.GetOrCreate<Tags.DrawStamps>();
 
         [ConfigVar("influencegizmo.draw-stamp-labels", false, "Draw stamp weight labels.")]
-        public static readonly SharedStatic<bool> DrawStampLabels = SharedStatic<bool>.GetOrCreate<Tags.DrawStampLabels>();
+        public static readonly SharedStatic<bool> DrawStampLabels =
+            SharedStatic<bool>.GetOrCreate<Tags.DrawStampLabels>();
 
         [ConfigVar("influencegizmo.draw-grid", true, "Draw active chunk boundaries.")]
         public static readonly SharedStatic<bool> DrawGrid = SharedStatic<bool>.GetOrCreate<Tags.DrawGrid>();
@@ -38,10 +39,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         [ConfigVar("influencegizmo.draw-values", true, "Draw accumulated influence values inside the camera frustum.")]
         public static readonly SharedStatic<bool> DrawValues = SharedStatic<bool>.GetOrCreate<Tags.DrawValues>();
 
-        [ConfigVar("influencegizmo.draw-value-text", false, "Draw numeric labels for influence cells. Very expensive on large worlds.")]
+        [ConfigVar("influencegizmo.draw-value-text", false,
+            "Draw numeric labels for influence cells. Very expensive on large worlds.")]
         public static readonly SharedStatic<bool> DrawValueText = SharedStatic<bool>.GetOrCreate<Tags.DrawValueText>();
 
-        [ConfigVar("influencegizmo.cull-to-camera", true, "Only draw influence debug chunks intersecting the active camera frustum.")]
+        [ConfigVar("influencegizmo.cull-to-camera", true,
+            "Only draw influence debug chunks intersecting the active camera frustum.")]
         public static readonly SharedStatic<bool> CullToCamera = SharedStatic<bool>.GetOrCreate<Tags.CullToCamera>();
 
         [ConfigVar("influencegizmo.value-stride", 1, "Draw one influence sample every N cells.")]
@@ -60,17 +63,49 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
         private struct Tags
         {
-            public struct Enabled { }
-            public struct DrawStamps { }
-            public struct DrawStampLabels { }
-            public struct DrawGrid { }
-            public struct DrawValues { }
-            public struct DrawValueText { }
-            public struct CullToCamera { }
-            public struct ValueStride { }
-            public struct PositiveColor { }
-            public struct NegativeColor { }
-            public struct GridColor { }
+            public struct Enabled
+            {
+            }
+
+            public struct DrawStamps
+            {
+            }
+
+            public struct DrawStampLabels
+            {
+            }
+
+            public struct DrawGrid
+            {
+            }
+
+            public struct DrawValues
+            {
+            }
+
+            public struct DrawValueText
+            {
+            }
+
+            public struct CullToCamera
+            {
+            }
+
+            public struct ValueStride
+            {
+            }
+
+            public struct PositiveColor
+            {
+            }
+
+            public struct NegativeColor
+            {
+            }
+
+            public struct GridColor
+            {
+            }
         }
     }
 
@@ -457,7 +492,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                         var pad = CellSize * 0.05f;
                         var c0 = Basis.ToWorldSpace(cellGrid + new float2(pad, pad), RenderHeight);
                         var c1 = Basis.ToWorldSpace(cellGrid + new float2(CellSize - pad, pad), RenderHeight);
-                        var c2 = Basis.ToWorldSpace(cellGrid + new float2(CellSize - pad, CellSize - pad), RenderHeight);
+                        var c2 = Basis.ToWorldSpace(cellGrid + new float2(CellSize - pad, CellSize - pad),
+                            RenderHeight);
                         var c3 = Basis.ToWorldSpace(cellGrid + new float2(pad, CellSize - pad), RenderHeight);
 
                         Drawer.Quad(c0, c1, c2, c3, fill);

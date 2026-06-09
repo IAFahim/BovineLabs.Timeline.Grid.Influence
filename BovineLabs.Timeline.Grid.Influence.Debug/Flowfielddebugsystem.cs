@@ -27,9 +27,17 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
         private struct Tags
         {
-            public struct Enabled { }
-            public struct FlowColor { }
-            public struct Stride { }
+            public struct Enabled
+            {
+            }
+
+            public struct FlowColor
+            {
+            }
+
+            public struct Stride
+            {
+            }
         }
     }
 
@@ -82,7 +90,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     Basis = basis,
                     FlowColor = FlowFieldDebugConfig.FlowColor.Data,
                     Stride = math.max(1, FlowFieldDebugConfig.Stride.Data),
-                    CameraCulling = cameraCulling,
+                    CameraCulling = cameraCulling
                 }.Schedule(dependency);
 
                 field.PublishDependency(dependency);
@@ -165,7 +173,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 var aabb = new AABB
                 {
                     Center = (min + max) * 0.5f,
-                    Extents = ((max - min) * 0.5f) + new float3(margin),
+                    Extents = (max - min) * 0.5f + new float3(margin)
                 };
 
                 return CameraCulling.AnyIntersect(aabb);

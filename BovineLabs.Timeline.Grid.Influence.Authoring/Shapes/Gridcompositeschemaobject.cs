@@ -18,16 +18,16 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
         public ushort Id => (ushort)id;
 
-        int IUID.ID
-        {
-            get => id;
-            set => id = value;
-        }
-
         private void OnValidate()
         {
             Profile.Peak = math.max(0, Profile.Peak);
             Profile.Levels = math.max(1, Profile.Levels);
+        }
+
+        int IUID.ID
+        {
+            get => id;
+            set => id = value;
         }
 
         public bool TryBuild(out BlobAssetReference<CompositeShapeBlob> blob)

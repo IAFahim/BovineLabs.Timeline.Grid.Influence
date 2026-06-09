@@ -1,7 +1,6 @@
 using System;
 using BovineLabs.Core.Authoring.EntityCommands;
 using BovineLabs.Timeline.Authoring;
-using BovineLabs.Timeline.Grid.Influence.Data;
 using BovineLabs.Timeline.Grid.Influence.Data.Builders;
 using BovineLabs.Timeline.Grid.Influence.Data.Flows;
 using Unity.Entities;

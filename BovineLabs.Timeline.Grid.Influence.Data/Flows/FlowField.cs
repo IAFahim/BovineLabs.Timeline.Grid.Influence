@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
@@ -154,7 +155,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data.Flows
             _frameId = frameId;
         }
 
-        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int2 Sample(int2 cell)
         {
             var coord = ChunkMath.ChunkCoordOf(cell, _spec.Log2);

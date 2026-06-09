@@ -337,7 +337,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 var aabb = new AABB
                 {
                     Center = (min + max) * 0.5f,
-                    Extents = ((max - min) * 0.5f) + new float3(margin),
+                    Extents = (max - min) * 0.5f + new float3(margin)
                 };
 
                 return CameraCulling.AnyIntersect(aabb);
@@ -482,10 +482,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     var baseIndex = slot * elements;
                     var chunkOrigin = new float2(coord.x * chunkSize, coord.y * chunkSize) * CellSize;
 
-                    if (DrawGrid)
-                    {
-                        DrawChunkBounds(chunkOrigin, chunkSize);
-                    }
+                    if (DrawGrid) DrawChunkBounds(chunkOrigin, chunkSize);
 
                     if (!DrawValues) continue;
 
@@ -545,7 +542,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 var aabb = new AABB
                 {
                     Center = (min + max) * 0.5f,
-                    Extents = ((max - min) * 0.5f) + new float3(margin),
+                    Extents = (max - min) * 0.5f + new float3(margin)
                 };
 
                 return CameraCulling.AnyIntersect(aabb);

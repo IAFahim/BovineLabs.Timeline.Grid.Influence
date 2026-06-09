@@ -88,7 +88,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public static long FloorDiv(long a, long b)
         {
             var q = a / b;
-            if (a % b != 0 && (a < 0) != (b < 0)) q--;
+            if (a % b != 0 && a < 0 != b < 0) q--;
             return q;
         }
 
@@ -96,7 +96,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public static long CeilDiv(long a, long b)
         {
             var q = a / b;
-            if (a % b != 0 && (a < 0) == (b < 0)) q++;
+            if (a % b != 0 && a < 0 == b < 0) q++;
             return q;
         }
     }

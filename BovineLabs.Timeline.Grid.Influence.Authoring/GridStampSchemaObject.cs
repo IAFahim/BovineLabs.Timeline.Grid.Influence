@@ -11,6 +11,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
     [CreateAssetMenu(menuName = "BovineLabs/Grid/Stamp Schema")]
     public class GridStampSchemaObject : ScriptableObject, IUID
     {
+        private const int RayScale = 1024;
         [SerializeField] [InspectorReadOnly] private int id;
 
         public ShapeKind Kind = ShapeKind.Disc;
@@ -54,8 +55,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public int SectorRadius = 6;
         public float SectorFacingDegrees = 90f;
         [Range(1f, 90f)] public float SectorHalfAngleDegrees = 30f;
-
-        private const int RayScale = 1024;
 
         public ushort Id => (ushort)id;
 

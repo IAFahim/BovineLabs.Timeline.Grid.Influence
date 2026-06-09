@@ -9,6 +9,7 @@ using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.Timeline;
+using Hash128 = UnityEngine.Hash128;
 
 namespace BovineLabs.Timeline.Grid.Influence.Authoring
 {
@@ -67,8 +68,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 for (var i = 0; i < weights.Length; i++)
                     weights[i] *= sign;
 
-            var hash = new UnityEngine.Hash128(
-                (uint)Composite.Id,
+            var hash = new Hash128(
+                Composite.Id,
                 (uint)Composite.Profile.Peak,
                 (uint)Composite.Profile.Levels,
                 (uint)((int)baseShape.Kind << 1) | (uint)(sign < 0 ? 1 : 0));

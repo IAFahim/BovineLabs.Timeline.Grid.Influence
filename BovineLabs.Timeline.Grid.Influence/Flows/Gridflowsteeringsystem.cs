@@ -39,7 +39,7 @@ namespace BovineLabs.Timeline.Grid.Influence
             var cellSize = math.max(0.0001f, settings.CellSize);
             var basis = new GridBasis(settings.PlaneNormal);
             var deltaTime = SystemAPI.Time.DeltaTime;
-            var transformLookup = SystemAPI.GetComponentLookup<LocalTransform>(false);
+            var transformLookup = SystemAPI.GetComponentLookup<LocalTransform>();
 
             foreach (var (steering, binding, weight) in
                      SystemAPI.Query<RefRO<GridFlowSteeringData>, RefRO<TrackBinding>, RefRO<ClipWeight>>()

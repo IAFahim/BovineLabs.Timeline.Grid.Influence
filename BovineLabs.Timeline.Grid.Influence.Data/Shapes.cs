@@ -23,8 +23,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public readonly ShapeKind Kind;
         public readonly int Weight;
 
-        private readonly int2 _aux;
-
         private InfluenceShape(ShapeKind kind, int weight, int2 a, int2 b, int p, int q, int2 aux)
         {
             Kind = kind;
@@ -33,7 +31,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             RectSize = b;
             ShellThickness = p;
             AnnulusInnerRadius = q;
-            _aux = aux;
+            SectorDir1 = aux;
         }
 
         public int2 RectMin { get; }
@@ -69,12 +67,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public int2 SectorCenter => RectMin;
         public int2 SectorDir0 => RectSize;
         public int SectorRadius => ShellThickness;
-        public int2 SectorDir1 => _aux;
+        public int2 SectorDir1 { get; }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public InfluenceShape WithWeight(int weight)
         {
-            return new InfluenceShape(Kind, weight, RectMin, RectSize, ShellThickness, AnnulusInnerRadius, _aux);
+            return new InfluenceShape(Kind, weight, RectMin, RectSize, ShellThickness, AnnulusInnerRadius, SectorDir1);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -98,7 +96,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static InfluenceShape Annulus(int2 center, int outerRadius, int innerRadius, int weight)
         {
-            return new InfluenceShape(ShapeKind.Annulus, weight, center, int2.zero, outerRadius, innerRadius, int2.zero);
+            return new InfluenceShape(ShapeKind.Annulus, weight, center, int2.zero, outerRadius, innerRadius,
+                int2.zero);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

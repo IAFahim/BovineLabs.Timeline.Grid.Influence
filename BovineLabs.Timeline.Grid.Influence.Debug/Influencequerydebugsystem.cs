@@ -15,7 +15,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
     [Configurable]
     public static class InfluenceQueryDebugConfig
     {
-        [ConfigVar("influencegizmo.draw-query", false, "Draw query results as a sampled cell outline and direction arrow.")]
+        [ConfigVar("influencegizmo.draw-query", false,
+            "Draw query results as a sampled cell outline and direction arrow.")]
         public static readonly SharedStatic<bool> Enabled = SharedStatic<bool>.GetOrCreate<Tags.Enabled>();
 
         [ConfigVar("influencegizmo.query-cell-color", 0.95f, 0.65f, 0.2f, 0.9f, "Sampled cell outline color.")]

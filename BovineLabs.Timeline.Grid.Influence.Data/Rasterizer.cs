@@ -234,6 +234,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     break;
 
                 case ShapeKind.Annulus:
+                    if (shape.AnnulusOuterRadius < 0 || shape.AnnulusInnerRadius >= shape.AnnulusOuterRadius)
+                    {
+                        break;
+                    }
+
                     EmitDisc(ref sink, origin + shape.AnnulusCenter, shape.AnnulusOuterRadius, weight);
                     if (shape.AnnulusInnerRadius >= 0)
                         EmitDisc(ref sink, origin + shape.AnnulusCenter, shape.AnnulusInnerRadius, -weight);

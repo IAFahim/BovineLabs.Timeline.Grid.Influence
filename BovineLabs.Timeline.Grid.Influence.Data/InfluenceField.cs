@@ -13,10 +13,20 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         private NativeFlatMap _slotByCoord;
         private NativeList<int2> _coordBySlot;
         private NativeList<uint> _lastWrittenBySlot;
+        private NativeList<byte> _nonZeroBySlot;
         private NativeList<int> _freeSlots;
         private NativeList<int> _activeSlots;
         private NativeList<int> _data;
         private NativeList<Stamp> _extractedStamps;
+
+        private NativeList<int> _offsets;
+        private NativeList<WeightedRect> _spans;
+        private NativeList<int> _stampCount;
+
+        private NativeArray<Stamp> _emptyStamps;
+        private NativeArray<int> _emptyInts;
+        private NativeArray<int2> _emptyCoords;
+        private NativeArray<byte> _emptyBytes;
 
         private GridSpec _spec;
         private Allocator _allocator;
@@ -36,10 +46,18 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 _slotByCoord = NativeFlatMap.Create(64, allocator),
                 _coordBySlot = new NativeList<int2>(64, allocator),
                 _lastWrittenBySlot = new NativeList<uint>(64, allocator),
+                _nonZeroBySlot = new NativeList<byte>(64, allocator),
                 _freeSlots = new NativeList<int>(64, allocator),
                 _activeSlots = new NativeList<int>(64, allocator),
                 _data = new NativeList<int>(64 * spec.ElementsPerChunk, allocator),
                 _extractedStamps = new NativeList<Stamp>(256, allocator),
+                _offsets = new NativeList<int>(64, allocator),
+                _spans = new NativeList<WeightedRect>(1024, allocator),
+                _stampCount = new NativeList<int>(64, allocator),
+                _emptyStamps = new NativeArray<Stamp>(0, allocator),
+                _emptyInts = new NativeArray<int>(0, allocator),
+                _emptyCoords = new NativeArray<int2>(0, allocator),
+                _emptyBytes = new NativeArray<byte>(0, allocator),
                 _spec = spec,
                 FrameId = 1,
                 _allocator = allocator,
@@ -70,6 +88,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             public NativeArray<int> ActiveSlots;
             public NativeArray<int2> CoordBySlot;
             public NativeArray<int> Data;
+            public NativeArray<byte> NonZeroBySlot;
             public NativeFlatMap.ReadOnly SlotByCoord;
             public int DecayPerMille;
             public int SpreadDenominator;
@@ -86,183 +105,46 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             ThrowIfNotCreated();
             var combined = JobHandle.CombineDependencies(_dependency, dependsOn);
-
-            var resetFrame = false;
-            if (FrameId == uint.MaxValue)
-            {
-                resetFrame = true;
-                FrameId = 1;
-            }
-            else
-            {
-                FrameId++;
-            }
-
-            var disposeStencil = false;
-            if (!stencil.IsActive)
-            {
-                disposeStencil = true;
-                stencil.ActiveSlots = new NativeArray<int>(0, Allocator.TempJob);
-                stencil.CoordBySlot = new NativeArray<int2>(0, Allocator.TempJob);
-                stencil.Data = new NativeArray<int>(0, Allocator.TempJob);
-            }
-
-            var offsets = new NativeList<int>(1, Allocator.TempJob);
-            var spans = new NativeList<WeightedRect>(1, Allocator.TempJob);
-            var stampCount = new NativeList<int>(1, Allocator.TempJob);
+            NormalizeStencil(ref stencil);
 
             var prepare = new PrepareSlotsFromMapJob
             {
                 StampsMap = stampsMap,
                 SlotIndex = slotIndex,
                 ExtractedStamps = _extractedStamps,
-                Helper = new PrepareSlotsHelper
-                {
-                    Offsets = offsets,
-                    Spans = spans,
-                    StampCount = stampCount,
-                    SlotByCoord = _slotByCoord,
-                    FreeSlots = _freeSlots,
-                    CoordBySlot = _coordBySlot,
-                    LastWrittenBySlot = _lastWrittenBySlot,
-                    ActiveSlots = _activeSlots,
-                    Data = _data,
-                    Spec = _spec,
-                    FrameId = FrameId,
-                    ResetFrame = resetFrame,
-                    RetentionFrames = _spec.RetentionFrames,
-                    HasStencil = stencil.IsActive,
-                    StencilActiveSlots = stencil.ActiveSlots,
-                    StencilCoordBySlot = stencil.CoordBySlot,
-                    StencilData = stencil.Data,
-                    DecayPerMille = stencil.DecayPerMille,
-                    SpreadDenominator = stencil.SpreadDenominator
-                }
+                Helper = NewHelper(stencil)
             }.Schedule(combined);
 
-            var rasterize = new RasterizeJob
-            {
-                StampCount = stampCount.AsDeferredJobArray(),
-                Stamps = _extractedStamps.AsDeferredJobArray(),
-                Offsets = offsets.AsDeferredJobArray(),
-                Spans = spans.AsDeferredJobArray()
-            }.Schedule(stampCount, 1, prepare);
-
-            var clear = new ClearJob
-            {
-                ActiveSlots = _activeSlots.AsDeferredJobArray(),
-                Data = _data.AsDeferredJobArray(),
-                ElementsPerChunk = _spec.ElementsPerChunk
-            }.Schedule(_activeSlots, 1, prepare);
-
-            var scatter = new ScatterJob
-            {
-                StampCount = stampCount.AsDeferredJobArray(),
-                Offsets = offsets.AsDeferredJobArray(),
-                Spans = spans.AsDeferredJobArray(),
-                SlotByCoord = _slotByCoord.AsReadOnly(),
-                Data = _data.AsDeferredJobArray(),
-                Spec = _spec
-            }.Schedule(stampCount, 1, JobHandle.CombineDependencies(rasterize, clear));
-
-            var resolve = new ResolveJob
-            {
-                ActiveSlots = _activeSlots.AsDeferredJobArray(),
-                CoordBySlot = _coordBySlot.AsDeferredJobArray(),
-                Data = _data.AsDeferredJobArray(),
-                Spec = _spec,
-                HasStencil = stencil.IsActive,
-                StencilData = stencil.Data,
-                StencilSlotByCoord = stencil.SlotByCoord,
-                DecayPerMille = stencil.DecayPerMille,
-                SpreadDenominator = stencil.SpreadDenominator
-            }.Schedule(_activeSlots, 1, scatter);
-
-            var cleanup = JobHandle.CombineDependencies(spans.Dispose(resolve), offsets.Dispose(resolve));
-            cleanup = JobHandle.CombineDependencies(cleanup, stampCount.Dispose(resolve));
-            if (disposeStencil)
-            {
-                cleanup = stencil.ActiveSlots.Dispose(cleanup);
-                cleanup = stencil.CoordBySlot.Dispose(cleanup);
-                cleanup = stencil.Data.Dispose(cleanup);
-            }
-
-            _dependency = cleanup;
-            return cleanup;
+            return ScheduleCore(prepare, _extractedStamps.AsDeferredJobArray(), stencil);
         }
 
         public JobHandle Schedule(NativeArray<Stamp> stamps, JobHandle dependsOn, StencilConfig stencil = default)
         {
             ThrowIfNotCreated();
             var combined = JobHandle.CombineDependencies(_dependency, dependsOn);
+            NormalizeStencil(ref stencil);
 
-            var resetFrame = false;
-            if (FrameId == uint.MaxValue)
-            {
-                resetFrame = true;
-                FrameId = 1;
-            }
-            else
-            {
-                FrameId++;
-            }
-
-            var disposeStamps = false;
             if (!stamps.IsCreated)
-            {
-                stamps = new NativeArray<Stamp>(0, Allocator.TempJob);
-                disposeStamps = true;
-            }
-
-            var disposeStencil = false;
-            if (!stencil.IsActive)
-            {
-                disposeStencil = true;
-                stencil.ActiveSlots = new NativeArray<int>(0, Allocator.TempJob);
-                stencil.CoordBySlot = new NativeArray<int2>(0, Allocator.TempJob);
-                stencil.Data = new NativeArray<int>(0, Allocator.TempJob);
-            }
-
-            var offsets = new NativeList<int>(1, Allocator.TempJob);
-            var spans = new NativeList<WeightedRect>(1, Allocator.TempJob);
-            var stampCount = new NativeList<int>(1, Allocator.TempJob);
-
-            var localStamps = stamps;
+                stamps = _emptyStamps;
 
             var prepare = new PrepareSlotsFromArrayJob
             {
-                Stamps = localStamps,
-                Helper = new PrepareSlotsHelper
-                {
-                    Offsets = offsets,
-                    Spans = spans,
-                    StampCount = stampCount,
-                    SlotByCoord = _slotByCoord,
-                    FreeSlots = _freeSlots,
-                    CoordBySlot = _coordBySlot,
-                    LastWrittenBySlot = _lastWrittenBySlot,
-                    ActiveSlots = _activeSlots,
-                    Data = _data,
-                    Spec = _spec,
-                    FrameId = FrameId,
-                    ResetFrame = resetFrame,
-                    RetentionFrames = _spec.RetentionFrames,
-                    HasStencil = stencil.IsActive,
-                    StencilActiveSlots = stencil.ActiveSlots,
-                    StencilCoordBySlot = stencil.CoordBySlot,
-                    StencilData = stencil.Data,
-                    DecayPerMille = stencil.DecayPerMille,
-                    SpreadDenominator = stencil.SpreadDenominator
-                }
+                Stamps = stamps,
+                Helper = NewHelper(stencil)
             }.Schedule(combined);
 
+            return ScheduleCore(prepare, stamps, stencil);
+        }
+
+        private JobHandle ScheduleCore(JobHandle prepare, NativeArray<Stamp> stamps, in StencilConfig stencil)
+        {
             var rasterize = new RasterizeJob
             {
-                StampCount = stampCount.AsDeferredJobArray(),
-                Stamps = localStamps,
-                Offsets = offsets.AsDeferredJobArray(),
-                Spans = spans.AsDeferredJobArray()
-            }.Schedule(stampCount, 1, prepare);
+                StampCount = _stampCount.AsDeferredJobArray(),
+                Stamps = stamps,
+                Offsets = _offsets.AsDeferredJobArray(),
+                Spans = _spans.AsDeferredJobArray()
+            }.Schedule(_stampCount, 1, prepare);
 
             var clear = new ClearJob
             {
@@ -273,19 +155,20 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
             var scatter = new ScatterJob
             {
-                StampCount = stampCount.AsDeferredJobArray(),
-                Offsets = offsets.AsDeferredJobArray(),
-                Spans = spans.AsDeferredJobArray(),
+                StampCount = _stampCount.AsDeferredJobArray(),
+                Offsets = _offsets.AsDeferredJobArray(),
+                Spans = _spans.AsDeferredJobArray(),
                 SlotByCoord = _slotByCoord.AsReadOnly(),
                 Data = _data.AsDeferredJobArray(),
                 Spec = _spec
-            }.Schedule(stampCount, 1, JobHandle.CombineDependencies(rasterize, clear));
+            }.Schedule(_stampCount, 1, JobHandle.CombineDependencies(rasterize, clear));
 
             var resolve = new ResolveJob
             {
                 ActiveSlots = _activeSlots.AsDeferredJobArray(),
                 CoordBySlot = _coordBySlot.AsDeferredJobArray(),
                 Data = _data.AsDeferredJobArray(),
+                NonZeroBySlot = _nonZeroBySlot.AsDeferredJobArray(),
                 Spec = _spec,
                 HasStencil = stencil.IsActive,
                 StencilData = stencil.Data,
@@ -294,18 +177,50 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 SpreadDenominator = stencil.SpreadDenominator
             }.Schedule(_activeSlots, 1, scatter);
 
-            var cleanup = JobHandle.CombineDependencies(spans.Dispose(resolve), offsets.Dispose(resolve));
-            cleanup = JobHandle.CombineDependencies(cleanup, stampCount.Dispose(resolve));
-            if (disposeStamps) cleanup = localStamps.Dispose(cleanup);
-            if (disposeStencil)
-            {
-                cleanup = stencil.ActiveSlots.Dispose(cleanup);
-                cleanup = stencil.CoordBySlot.Dispose(cleanup);
-                cleanup = stencil.Data.Dispose(cleanup);
-            }
+            _dependency = resolve;
+            return resolve;
+        }
 
-            _dependency = cleanup;
-            return cleanup;
+        private PrepareSlotsHelper NewHelper(in StencilConfig stencil)
+        {
+            var resetFrame = FrameId == uint.MaxValue;
+            FrameId = resetFrame ? 1u : FrameId + 1u;
+
+            return new PrepareSlotsHelper
+            {
+                Offsets = _offsets,
+                Spans = _spans,
+                StampCount = _stampCount,
+                SlotByCoord = _slotByCoord,
+                FreeSlots = _freeSlots,
+                CoordBySlot = _coordBySlot,
+                LastWrittenBySlot = _lastWrittenBySlot,
+                NonZeroBySlot = _nonZeroBySlot,
+                ActiveSlots = _activeSlots,
+                Data = _data,
+                Spec = _spec,
+                FrameId = FrameId,
+                ResetFrame = resetFrame,
+                RetentionFrames = _spec.RetentionFrames,
+                HasStencil = stencil.IsActive,
+                StencilActiveSlots = stencil.ActiveSlots,
+                StencilCoordBySlot = stencil.CoordBySlot,
+                StencilData = stencil.Data,
+                StencilNonZeroBySlot = stencil.NonZeroBySlot,
+                DecayPerMille = stencil.DecayPerMille,
+                SpreadDenominator = stencil.SpreadDenominator
+            };
+        }
+
+        private void NormalizeStencil(ref StencilConfig stencil)
+        {
+            if (stencil.IsActive)
+                return;
+
+            stencil.ActiveSlots = _emptyInts;
+            stencil.CoordBySlot = _emptyCoords;
+            stencil.Data = _emptyInts;
+            stencil.NonZeroBySlot = _emptyBytes;
         }
 
         public void Dispose()
@@ -315,10 +230,18 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             _slotByCoord.Dispose();
             _coordBySlot.Dispose();
             _lastWrittenBySlot.Dispose();
+            _nonZeroBySlot.Dispose();
             _freeSlots.Dispose();
             _activeSlots.Dispose();
             _data.Dispose();
             if (_extractedStamps.IsCreated) _extractedStamps.Dispose();
+            _offsets.Dispose();
+            _spans.Dispose();
+            _stampCount.Dispose();
+            _emptyStamps.Dispose();
+            _emptyInts.Dispose();
+            _emptyCoords.Dispose();
+            _emptyBytes.Dispose();
             this = default;
         }
 
@@ -329,10 +252,18 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             handle = _slotByCoord.Dispose(handle);
             handle = _coordBySlot.Dispose(handle);
             handle = _lastWrittenBySlot.Dispose(handle);
+            handle = _nonZeroBySlot.Dispose(handle);
             handle = _freeSlots.Dispose(handle);
             handle = _activeSlots.Dispose(handle);
             handle = _data.Dispose(handle);
             if (_extractedStamps.IsCreated) handle = _extractedStamps.Dispose(handle);
+            handle = _offsets.Dispose(handle);
+            handle = _spans.Dispose(handle);
+            handle = _stampCount.Dispose(handle);
+            handle = _emptyStamps.Dispose(handle);
+            handle = _emptyInts.Dispose(handle);
+            handle = _emptyCoords.Dispose(handle);
+            handle = _emptyBytes.Dispose(handle);
             this = default;
             return handle;
         }
@@ -433,6 +364,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             [ReadOnly] public NativeArray<int> ActiveSlots;
             [ReadOnly] public NativeArray<int2> CoordBySlot;
             [NativeDisableParallelForRestriction] public NativeArray<int> Data;
+            [NativeDisableParallelForRestriction] public NativeArray<byte> NonZeroBySlot;
             public GridSpec Spec;
 
             public bool HasStencil;
@@ -444,102 +376,94 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             public void Execute(int index)
             {
                 var slot = ActiveSlots[index];
-                var coord = CoordBySlot[slot];
-                var baseIndex = slot * Spec.ElementsPerChunk;
-                var field = (int*)Data.GetUnsafePtr() + baseIndex;
+                var field = (int*)Data.GetUnsafePtr() + slot * Spec.ElementsPerChunk;
 
                 PrefixSum.Run(field, Spec);
 
-                if (HasStencil) ApplyStencil(coord, field);
+                if (HasStencil) ApplyStencil(CoordBySlot[slot], field);
+
+                NonZeroBySlot[slot] = AnyNonZero(field);
+            }
+
+            private byte AnyNonZero(int* field)
+            {
+                var chunkSize = Spec.ChunkSize;
+                var stride = Spec.Stride;
+                var acc = 0;
+
+                for (var y = 0; y < chunkSize; y++)
+                {
+                    var row = field + y * stride;
+                    for (var x = 0; x < chunkSize; x++) acc |= row[x];
+                }
+
+                return acc != 0 ? (byte)1 : (byte)0;
             }
 
             private void ApplyStencil(int2 coord, int* field)
             {
                 var chunkSize = Spec.ChunkSize;
                 var stride = Spec.Stride;
+                var haloStride = chunkSize + 2;
 
-                var stencilSelfBase = -1;
-                if (StencilSlotByCoord.TryGetValue(coord, out var stencilSelfSlot))
-                    stencilSelfBase = stencilSelfSlot * Spec.ElementsPerChunk;
+                var outflowHalo = new NativeArray<int>(haloStride * haloStride, Allocator.Temp);
+                var halo = (int*)outflowHalo.GetUnsafePtr();
 
-                var stencilPtr = (int*)StencilData.GetUnsafeReadOnlyPtr();
-
-                for (var y = 0; y < chunkSize; y++)
-                for (var x = 0; x < chunkSize; x++)
+                if (StencilSlotByCoord.TryGetValue(coord, out var selfSlot))
                 {
-                    var self = 0;
-                    if (stencilSelfBase >= 0) self = stencilPtr[stencilSelfBase + y * stride + x];
-
-                    var incoming =
-                        SpreadAt(coord, x - 1, y, stride, stencilPtr) +
-                        SpreadAt(coord, x + 1, y, stride, stencilPtr) +
-                        SpreadAt(coord, x, y - 1, stride, stencilPtr) +
-                        SpreadAt(coord, x, y + 1, stride, stencilPtr);
-
-                    var retained = 0;
-                    if (self != 0)
+                    var self = (int*)StencilData.GetUnsafeReadOnlyPtr() + selfSlot * Spec.ElementsPerChunk;
+                    for (var y = 0; y < chunkSize; y++)
                     {
-                        var vp = self - (int)((long)self * DecayPerMille / 1000);
-                        if (vp != 0)
+                        var source = self + y * stride;
+                        var haloRow = halo + (y + 1) * haloStride + 1;
+                        var target = field + y * stride;
+                        for (var x = 0; x < chunkSize; x++)
                         {
-                            var q = vp / SpreadDenominator;
-                            retained = vp - 4 * q;
+                            var kept = IntegerMath.DecayKeep(source[x], DecayPerMille);
+                            var spread = kept / SpreadDenominator;
+                            haloRow[x] = spread;
+                            target[x] += kept - 4 * spread;
                         }
                     }
-
-                    field[y * stride + x] += retained + incoming;
                 }
+
+                FillHaloColumn(new int2(coord.x - 1, coord.y), chunkSize - 1, 0, halo, haloStride);
+                FillHaloColumn(new int2(coord.x + 1, coord.y), 0, chunkSize + 1, halo, haloStride);
+                FillHaloRow(new int2(coord.x, coord.y - 1), chunkSize - 1, 0, halo, haloStride);
+                FillHaloRow(new int2(coord.x, coord.y + 1), 0, chunkSize + 1, halo, haloStride);
+
+                for (var y = 0; y < chunkSize; y++)
+                {
+                    var target = field + y * stride;
+                    var center = halo + (y + 1) * haloStride + 1;
+                    var below = center - haloStride;
+                    var above = center + haloStride;
+                    for (var x = 0; x < chunkSize; x++)
+                        target[x] += center[x - 1] + center[x + 1] + below[x] + above[x];
+                }
+
+                outflowHalo.Dispose();
             }
 
-            private int SpreadAt(int2 chunkCoord, int localX, int localY, int stride, int* stencilPtr)
+            private void FillHaloColumn(int2 coord, int sourceX, int haloX, int* halo, int haloStride)
             {
-                var chunkSize = Spec.ChunkSize;
-                var coord = chunkCoord;
+                if (!StencilSlotByCoord.TryGetValue(coord, out var slot)) return;
 
-                if ((uint)localX < (uint)chunkSize && (uint)localY < (uint)chunkSize)
-                {
-                    if (StencilSlotByCoord.TryGetValue(coord, out var s))
-                    {
-                        var v = stencilPtr[s * Spec.ElementsPerChunk + localY * stride + localX];
-                        if (v == 0) return 0;
-                        var vp = v - (int)((long)v * DecayPerMille / 1000);
-                        return vp == 0 ? 0 : vp / SpreadDenominator;
-                    }
+                var source = (int*)StencilData.GetUnsafeReadOnlyPtr() + slot * Spec.ElementsPerChunk;
+                for (var y = 0; y < Spec.ChunkSize; y++)
+                    halo[(y + 1) * haloStride + haloX] =
+                        IntegerMath.Outflow(source[y * Spec.Stride + sourceX], DecayPerMille, SpreadDenominator);
+            }
 
-                    return 0;
-                }
+            private void FillHaloRow(int2 coord, int sourceY, int haloY, int* halo, int haloStride)
+            {
+                if (!StencilSlotByCoord.TryGetValue(coord, out var slot)) return;
 
-                if (localX < 0)
-                {
-                    coord.x -= 1;
-                    localX += chunkSize;
-                }
-                else if (localX >= chunkSize)
-                {
-                    coord.x += 1;
-                    localX -= chunkSize;
-                }
-
-                if (localY < 0)
-                {
-                    coord.y -= 1;
-                    localY += chunkSize;
-                }
-                else if (localY >= chunkSize)
-                {
-                    coord.y += 1;
-                    localY -= chunkSize;
-                }
-
-                if (StencilSlotByCoord.TryGetValue(coord, out var slot))
-                {
-                    var v = stencilPtr[slot * Spec.ElementsPerChunk + localY * stride + localX];
-                    if (v == 0) return 0;
-                    var vp = v - (int)((long)v * DecayPerMille / 1000);
-                    return vp == 0 ? 0 : vp / SpreadDenominator;
-                }
-
-                return 0;
+                var source = (int*)StencilData.GetUnsafeReadOnlyPtr() + slot * Spec.ElementsPerChunk +
+                             sourceY * Spec.Stride;
+                for (var x = 0; x < Spec.ChunkSize; x++)
+                    halo[haloY * haloStride + (x + 1)] =
+                        IntegerMath.Outflow(source[x], DecayPerMille, SpreadDenominator);
             }
         }
     }

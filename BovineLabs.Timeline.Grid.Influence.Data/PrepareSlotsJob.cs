@@ -8,6 +8,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 {
     public unsafe struct PrepareSlotsHelper
     {
+        internal const int MaxSpansPerSchedule = 1 << 20;
+
         public NativeList<int> Offsets;
         public NativeList<WeightedRect> Spans;
         public NativeList<int> StampCount;
@@ -16,6 +18,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public NativeList<int> FreeSlots;
         public NativeList<int2> CoordBySlot;
         public NativeList<uint> LastWrittenBySlot;
+        public NativeList<byte> NonZeroBySlot;
         public NativeList<int> ActiveSlots;
         public NativeList<int> Data;
         public GridSpec Spec;
@@ -27,6 +30,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         [ReadOnly] public NativeArray<int> StencilActiveSlots;
         [ReadOnly] public NativeArray<int2> StencilCoordBySlot;
         [ReadOnly] public NativeArray<int> StencilData;
+        [ReadOnly] public NativeArray<byte> StencilNonZeroBySlot;
         public int DecayPerMille;
         public int SpreadDenominator;
 
@@ -66,6 +70,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     var coord = CoordBySlot[highestSlot];
                     CoordBySlot[freeSlot] = coord;
                     LastWrittenBySlot[freeSlot] = LastWrittenBySlot[highestSlot];
+                    NonZeroBySlot[freeSlot] = NonZeroBySlot[highestSlot];
                     SlotByCoord.Add(coord, freeSlot);
 
                     LastWrittenBySlot[highestSlot] = 0;
@@ -77,6 +82,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 {
                     CoordBySlot.Length = newCount;
                     LastWrittenBySlot.Length = newCount;
+                    NonZeroBySlot.Length = newCount;
                     Data.Length = newCount * Spec.ElementsPerChunk;
                 }
 
@@ -96,18 +102,22 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             StampCount.Length = resolved.Length;
             if (resolved.Length == 0) return;
 
-            long running = 0;
+            var running = 0;
             Offsets.Length = resolved.Length + 1;
             for (var i = 0; i < resolved.Length; i++)
             {
-                Offsets[i] = IntegerMath.ClampToInt(running);
+                Offsets[i] = running;
                 var shape = resolved[i].Shape;
-                running += Rasterizer.EstimateSpanCount(shape);
+                var estimate = Rasterizer.EstimateSpanCount(shape);
+                if (estimate <= 0 || estimate > MaxSpansPerSchedule - running)
+                    continue;
+
+                running += estimate;
                 ActivateBounds(Rasterizer.Bounds(shape, resolved[i].Origin));
             }
 
-            Offsets[resolved.Length] = IntegerMath.ClampToInt(running);
-            Spans.Length = Offsets[resolved.Length];
+            Offsets[resolved.Length] = running;
+            Spans.Length = running;
         }
 
         private void ActivateStencilFrontier()
@@ -119,6 +129,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             for (var i = 0; i < StencilActiveSlots.Length; i++)
             {
                 var slot = StencilActiveSlots[i];
+                if ((uint)slot < (uint)StencilNonZeroBySlot.Length && StencilNonZeroBySlot[slot] == 0)
+                    continue;
+
                 var coord = StencilCoordBySlot[slot];
                 Activate(coord);
 
@@ -144,12 +157,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             {
                 var x = startX + i * dx;
                 var y = startY + i * dy;
-                var v = StencilData[baseIndex + y * stride + x];
-                if (v != 0)
-                {
-                    var vp = v - (int)((long)v * DecayPerMille / 1000);
-                    if (vp / SpreadDenominator != 0) return true;
-                }
+                if (IntegerMath.Outflow(StencilData[baseIndex + y * stride + x], DecayPerMille, SpreadDenominator) !=
+                    0)
+                    return true;
             }
 
             return false;
@@ -185,12 +195,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 FreeSlots.RemoveAtSwapBack(FreeSlots.Length - 1);
                 CoordBySlot[slot] = coord;
                 LastWrittenBySlot[slot] = 0;
+                NonZeroBySlot[slot] = 0;
             }
             else
             {
                 slot = CoordBySlot.Length;
                 CoordBySlot.Add(coord);
                 LastWrittenBySlot.Add(0);
+                NonZeroBySlot.Add(0);
                 Data.ResizeUninitialized(Data.Length + Spec.ElementsPerChunk);
             }
 

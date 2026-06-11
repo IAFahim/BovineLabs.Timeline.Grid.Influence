@@ -24,13 +24,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public FixedString64Bytes Name;
         public int ChunkPower;
         public uint RetentionFrames;
-        public bool HasFeedback;
         public int DecayPerMille;
         public int SpreadDenominator;
         public int StrideAlignment;
-
-        public bool NeedsDoubleBuffer => HasFeedback || DoubleBuffered;
         public bool DoubleBuffered;
+
+        public bool NeedsDoubleBuffer => DoubleBuffered || DecayPerMille > 0;
     }
 
     public struct FieldRegistry : IDisposable

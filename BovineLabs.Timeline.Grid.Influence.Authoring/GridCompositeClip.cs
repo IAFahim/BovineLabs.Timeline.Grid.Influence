@@ -54,6 +54,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             };
             var commands = new BakerCommands(context.Baker, clipEntity);
             builder.ApplyTo(ref commands);
+            commands.AddBuffer<InfluenceStampElement>();
 
             base.Bake(clipEntity, context);
         }
@@ -68,11 +69,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 for (var i = 0; i < weights.Length; i++)
                     weights[i] *= sign;
 
-            var hash = new Hash128(
-                Composite.Id,
-                (uint)Composite.Profile.Peak,
-                (uint)Composite.Profile.Levels,
-                (uint)((int)baseShape.Kind << 1) | (uint)(sign < 0 ? 1 : 0));
+            var hash = ContentHash(baseShape, weights);
 
             if (!context.Baker.TryGetBlobAssetReference(hash, out blob))
             {
@@ -82,6 +79,22 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
             weights.Dispose();
             return blob.IsCreated && blob.Value.Layers.Length > 0;
+        }
+
+        private static Hash128 ContentHash(InfluenceShape baseShape, NativeArray<int> weights)
+        {
+            var hash = default(Hash128);
+            HashUtilities.ComputeHash128(ref baseShape, ref hash);
+
+            var count = weights.Length;
+            HashUtilities.AppendHash(ref count, ref hash);
+            for (var i = 0; i < count; i++)
+            {
+                var weight = weights[i];
+                HashUtilities.AppendHash(ref weight, ref hash);
+            }
+
+            return hash;
         }
 
         private bool HasSchemas()

@@ -9,12 +9,29 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         internal NativeArray<int> ActiveSlotsDeferred => _activeSlots.AsDeferredJobArray();
         internal NativeArray<int2> CoordBySlotDeferred => _coordBySlot.AsDeferredJobArray();
         internal NativeArray<int> DataDeferred => _data.AsDeferredJobArray();
+        internal NativeArray<byte> NonZeroBySlotDeferred => _nonZeroBySlot.AsDeferredJobArray();
         internal NativeFlatMap.ReadOnly SlotByCoordReadOnly => _slotByCoord.AsReadOnly();
 
         internal NativeList<int> ActiveSlotsList => _activeSlots;
         internal NativeList<int2> CoordBySlotList => _coordBySlot;
         internal NativeList<int> DataList => _data;
+        internal NativeList<int> FreeSlotsList => _freeSlots;
         internal int ActiveChunkCount => _activeSlots.Length;
+
+        internal FieldReader AsDeferredReader()
+        {
+            return new FieldReader(
+                _slotByCoord.AsReadOnly(),
+                _lastWrittenBySlot.AsDeferredJobArray(),
+                _data.AsDeferredJobArray(),
+                _spec,
+                FrameId);
+        }
+
+        internal void OverrideFrameId(uint frameId)
+        {
+            FrameId = frameId;
+        }
 
         internal void PublishDependency(JobHandle handle)
         {

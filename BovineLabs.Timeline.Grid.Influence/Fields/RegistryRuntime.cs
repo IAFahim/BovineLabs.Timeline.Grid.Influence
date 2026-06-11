@@ -90,6 +90,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
                         ActiveSlots = pair.Front.ActiveSlotsDeferred,
                         CoordBySlot = pair.Front.CoordBySlotDeferred,
                         Data = pair.Front.DataDeferred,
+                        NonZeroBySlot = pair.Front.NonZeroBySlotDeferred,
                         SlotByCoord = pair.Front.SlotByCoordReadOnly,
                         DecayPerMille = pair.Config.DecayPerMille,
                         SpreadDenominator = pair.Config.SpreadDenominator

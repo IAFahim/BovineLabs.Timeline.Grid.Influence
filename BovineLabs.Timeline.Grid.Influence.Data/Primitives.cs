@@ -58,6 +58,18 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
     public static class IntegerMath
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int DecayKeep(int value, int decayPerMille)
+        {
+            return (int)((long)value * (1000 - decayPerMille) / 1000);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int Outflow(int value, int decayPerMille, int spreadDenominator)
+        {
+            return DecayKeep(value, decayPerMille) / spreadDenominator;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int FloorSqrt(long value)
         {
             if (value <= 0) return 0;

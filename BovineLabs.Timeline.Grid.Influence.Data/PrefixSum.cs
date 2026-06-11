@@ -13,7 +13,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         private static void HorizontalPass(int* field, int stride, int dimension)
         {
-            if (Avx2.IsAvx2Supported && dimension >= 8)
+            if (Avx2.IsAvx2Supported)
                 HorizontalPassAvx2(field, stride, dimension);
             else
                 HorizontalPassScalar(field, stride, dimension);
@@ -37,14 +37,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             var broadcastLane3 = Avx.mm256_set1_epi32(3);
             var highHalfMask = Avx.mm256_setr_epi32(0, 0, 0, 0, -1, -1, -1, -1);
-            var dim8 = dimension & ~7;
 
             for (var y = 0; y < dimension; y++)
             {
                 var row = field + y * stride;
                 var carry = 0;
-                var x = 0;
-                for (; x < dim8; x += 8)
+                for (var x = 0; x < stride; x += 8)
                 {
                     var v = Avx.mm256_loadu_si256(row + x);
                     v = Avx2.mm256_add_epi32(v, Avx2.mm256_slli_si256(v, 4));
@@ -53,14 +51,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                     v = Avx2.mm256_add_epi32(v, Avx2.mm256_and_si256(lowTotal, highHalfMask));
                     v = Avx2.mm256_add_epi32(v, Avx.mm256_set1_epi32(carry));
                     Avx.mm256_storeu_si256(row + x, v);
-                    carry = row[x + 7];
-                }
-
-                var running = carry;
-                for (; x < dimension; x++)
-                {
-                    running += row[x];
-                    row[x] = running;
+                    carry = v.SInt7;
                 }
             }
         }

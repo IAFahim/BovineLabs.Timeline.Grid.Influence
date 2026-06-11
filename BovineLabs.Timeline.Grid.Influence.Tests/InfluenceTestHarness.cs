@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Reflection;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -9,6 +8,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 {
     internal static unsafe class InfluenceTestHarness
     {
+        private const int RayScale = 1024;
+
         internal static int[,] Run(in GridSpec spec, Stamp[] stamps, int2 boxMin, int2 boxSize)
         {
             var field = InfluenceField.Create(spec, Allocator.Persistent);
@@ -132,6 +133,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                         ? shape.Weight
                         : 0;
 
+                case ShapeKind.Sector:
+                    return InSector(origin + shape.SectorCenter, shape.SectorRadius, shape.SectorDir0,
+                        shape.SectorDir1, cell)
+                        ? shape.Weight
+                        : 0;
+
                 default:
                     return 0;
             }
@@ -149,6 +156,19 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             long dx = cell.x - center.x;
             long dy = cell.y - center.y;
             return dx * dx + dy * dy <= (long)radius * radius;
+        }
+
+        internal static bool InSector(int2 center, int radius, int2 dir0, int2 dir1, int2 cell)
+        {
+            if (radius < 0) return false;
+
+            long qx = cell.x - center.x;
+            long qy = cell.y - center.y;
+            if (qx * qx + qy * qy > (long)radius * radius) return false;
+
+            var cross0 = dir0.x * qy - dir0.y * qx;
+            var cross1 = dir1.x * qy - dir1.y * qx;
+            return cross0 >= 0 && cross1 <= 0;
         }
 
         internal static bool InEllipse(int2 center, int2 radii, int2 cell)
@@ -239,7 +259,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             var weight = rng.NextInt(-5, 6);
             if (weight == 0) weight = 1;
 
-            switch (rng.NextInt(0, 8))
+            switch (rng.NextInt(0, 9))
             {
                 case 0:
                     return new Stamp(InfluenceShape.SolidRect(
@@ -286,6 +306,18 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                         rng.NextInt(0, 6),
                         weight), origin);
 
+                case 7:
+                {
+                    var facing = rng.NextFloat(0f, 360f);
+                    var halfAngle = rng.NextFloat(1f, 90f);
+                    return new Stamp(InfluenceShape.Sector(
+                        rng.NextInt2(new int2(-8, -8), new int2(9, 9)),
+                        rng.NextInt(0, 10),
+                        Ray(facing - halfAngle),
+                        Ray(facing + halfAngle),
+                        weight), origin);
+                }
+
                 default:
                     return new Stamp(InfluenceShape.ThickLine(
                         rng.NextInt2(new int2(-8, -8), new int2(9, 9)),
@@ -294,17 +326,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             }
         }
 
-        internal static void SetPrivate<T>(ref InfluenceField field, string name, T value)
+        private static int2 Ray(float degrees)
         {
-            object box = field;
-            typeof(InfluenceField).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance).SetValue(box, value);
-            field = (InfluenceField)box;
-        }
-
-        internal static T GetPrivate<T>(in InfluenceField field, string name)
-        {
-            return (T)typeof(InfluenceField).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)
-                .GetValue(field);
+            math.sincos(math.radians(degrees), out var sin, out var cos);
+            return new int2((int)math.round(RayScale * cos), (int)math.round(RayScale * sin));
         }
     }
 }

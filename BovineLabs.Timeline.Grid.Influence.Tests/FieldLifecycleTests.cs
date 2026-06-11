@@ -66,21 +66,19 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                 new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(1, 1), 1), new int2(0, 0)) },
                 Allocator.TempJob);
             field.Schedule(farA, default).Complete();
-            var slotsAfterFirst = InfluenceTestHarness.GetPrivate<NativeList<int>>(field, "_coordBySlot").Length;
+            var slotsAfterFirst = field.CoordBySlotList.Length;
 
             field.Schedule(default, default).Complete();
             field.Schedule(default, default).Complete();
 
-            Assert.Greater(InfluenceTestHarness.GetPrivate<NativeList<int>>(field, "_freeSlots").Length, 0,
-                "slot was not evicted");
+            Assert.Greater(field.FreeSlotsList.Length, 0, "slot was not evicted");
 
             var farB = new NativeArray<Stamp>(
                 new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(1, 1), 2), new int2(1000, 1000)) },
                 Allocator.TempJob);
             field.Schedule(farB, default).Complete();
 
-            Assert.AreEqual(slotsAfterFirst,
-                InfluenceTestHarness.GetPrivate<NativeList<int>>(field, "_coordBySlot").Length, "slot was not reused");
+            Assert.AreEqual(slotsAfterFirst, field.CoordBySlotList.Length, "slot was not reused");
             Assert.AreEqual(2, field.AsReader().ReadCell(new int2(1000, 1000)));
 
             farA.Dispose();
@@ -92,7 +90,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         public void FrameWraparoundResetsStalenessWithoutFalsePositives()
         {
             var field = InfluenceField.Create(GridSpec.FromPowerOfTwo(2, uint.MaxValue), Allocator.Persistent);
-            InfluenceTestHarness.SetPrivate(ref field, "_frameId", uint.MaxValue - 1u);
+            field.OverrideFrameId(uint.MaxValue - 1u);
 
             var first = new NativeArray<Stamp>(
                 new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(1, 1), 7), new int2(0, 0)) },

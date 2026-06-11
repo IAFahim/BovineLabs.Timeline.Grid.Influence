@@ -46,6 +46,26 @@ namespace BovineLabs.Timeline.Grid.Influence
             var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
             ref var fieldSingleton = ref SystemAPI.GetSingletonRW<FieldRegistrySingleton>().ValueRW;
 
+            var requiredCapacity = 0;
+            foreach (var (clip, extras) in SystemAPI
+                         .Query<RefRO<InfluenceClipData>, DynamicBuffer<InfluenceStampElement>>()
+                         .WithAll<TrackBinding, ClipActive, ClipWeight>())
+            {
+                var clipData = clip.ValueRO;
+                requiredCapacity += (clipData.Composite.IsCreated ? clipData.Composite.Value.Layers.Length : 1) +
+                                    extras.Length;
+            }
+
+            if (requiredCapacity == 0)
+                return;
+
+            if (requiredCapacity > fieldSingleton.PendingStamps.Capacity)
+            {
+                var map = fieldSingleton.PendingStamps;
+                map.Capacity = math.ceilpow2(requiredCapacity);
+                fieldSingleton.PendingStamps = map;
+            }
+
             var activeQuery = SystemAPI.QueryBuilder()
                 .WithAll<InfluenceClipData, InfluenceStampElement, TrackBinding, ClipActive, ClipWeight>()
                 .Build();

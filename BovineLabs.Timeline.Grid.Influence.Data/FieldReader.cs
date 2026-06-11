@@ -7,11 +7,17 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 {
     public unsafe struct FieldReader
     {
+        private const int MemoMiss = -1;
+
         [ReadOnly] private readonly NativeFlatMap.ReadOnly _slotByCoord;
         [ReadOnly] private NativeArray<uint> _lastWrittenBySlot;
         [ReadOnly] private NativeArray<int> _data;
         private readonly GridSpec _spec;
         private readonly uint _frameId;
+
+        private int2 _memoCoord;
+        private int _memoSlot;
+        private byte _memoValid;
 
         internal FieldReader(
             NativeFlatMap.ReadOnly slotByCoord,
@@ -25,24 +31,41 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             _data = data;
             _spec = spec;
             _frameId = frameId;
+            _memoCoord = default;
+            _memoSlot = MemoMiss;
+            _memoValid = 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadCell(int2 cell)
         {
-            var coord = ChunkMath.ChunkCoordOf(cell, _spec.Log2);
-            if (!_slotByCoord.TryGetValue(coord, out var slot) || _lastWrittenBySlot[slot] != _frameId) return 0;
+            var slot = ResolveSlot(ChunkMath.ChunkCoordOf(cell, _spec.Log2));
+            if (slot < 0) return 0;
 
-            var local = ChunkMath.LocalOf(cell, ChunkMath.ChunkBaseOf(coord, _spec.Log2));
-            if (!ChunkMath.ContainsLocal(local, _spec.ChunkSize)) return 0;
+            var mask = _spec.ChunkSize - 1;
+            return _data[ChunkMath.DataIndex(slot, cell.x & mask, cell.y & mask, _spec)];
+        }
 
-            return _data[ChunkMath.DataIndex(slot, local.x, local.y, _spec)];
+        public float SampleBilinear(float2 cellSpace)
+        {
+            var shifted = cellSpace - 0.5f;
+            var floored = math.floor(shifted);
+            var fraction = shifted - floored;
+            var baseCell = (int2)floored;
+
+            float v00 = ReadCell(baseCell);
+            float v10 = ReadCell(baseCell + new int2(1, 0));
+            float v01 = ReadCell(baseCell + new int2(0, 1));
+            float v11 = ReadCell(baseCell + new int2(1, 1));
+
+            return math.lerp(math.lerp(v00, v10, fraction.x), math.lerp(v01, v11, fraction.x), fraction.y);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool TryGetChunk(int2 coord, out ChunkView view)
         {
-            if (!_slotByCoord.TryGetValue(coord, out var slot) || _lastWrittenBySlot[slot] != _frameId)
+            var slot = ResolveSlot(coord);
+            if (slot < 0)
             {
                 view = default;
                 return false;
@@ -51,6 +74,22 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             view = new ChunkView((int*)_data.GetUnsafeReadOnlyPtr() + slot * _spec.ElementsPerChunk,
                 ChunkMath.ChunkBaseOf(coord, _spec.Log2), _spec);
             return true;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private int ResolveSlot(int2 coord)
+        {
+            if (_memoValid != 0 && coord.x == _memoCoord.x && coord.y == _memoCoord.y)
+                return _memoSlot;
+
+            var slot = _slotByCoord.TryGetValue(coord, out var found) && _lastWrittenBySlot[found] == _frameId
+                ? found
+                : MemoMiss;
+
+            _memoCoord = coord;
+            _memoSlot = slot;
+            _memoValid = 1;
+            return slot;
         }
     }
 

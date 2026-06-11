@@ -41,94 +41,102 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
     {
         public static CellRect Bounds(in InfluenceShape shape, int2 origin)
         {
-            switch (shape.Kind)
+            return shape.Kind switch
             {
-                case ShapeKind.SolidRect:
-                {
-                    if (shape.RectSize.x <= 0 || shape.RectSize.y <= 0) return CellRect.Empty;
+                ShapeKind.SolidRect => BoundsSolidRect(in shape, origin),
+                ShapeKind.RectShell => BoundsRectShell(in shape, origin),
+                ShapeKind.Disc => BoundsDisc(in shape, origin),
+                ShapeKind.Annulus => BoundsAnnulus(in shape, origin),
+                ShapeKind.Capsule => BoundsCapsule(in shape, origin),
+                ShapeKind.Ellipse => BoundsEllipse(in shape, origin),
+                ShapeKind.RoundedRect => BoundsRoundedRect(in shape, origin),
+                ShapeKind.ThickLine => BoundsThickLine(in shape, origin),
+                ShapeKind.Sector => BoundsSector(in shape, origin),
+                _ => CellRect.Empty
+            };
+        }
 
-                    var min = origin + shape.RectMin;
-                    return new CellRect(min, min + shape.RectSize);
-                }
+        private static CellRect BoundsSolidRect(in InfluenceShape shape, int2 origin)
+        {
+            if (shape.RectSize.x <= 0 || shape.RectSize.y <= 0) return CellRect.Empty;
 
-                case ShapeKind.RectShell:
-                {
-                    if (shape.ShellSize.x <= 0 || shape.ShellSize.y <= 0 || shape.ShellThickness <= 0)
-                        return CellRect.Empty;
+            var min = origin + shape.RectMin;
+            return new CellRect(min, min + shape.RectSize);
+        }
 
-                    var min = origin + shape.ShellMin;
-                    return new CellRect(min, min + shape.ShellSize);
-                }
+        private static CellRect BoundsRectShell(in InfluenceShape shape, int2 origin)
+        {
+            if (shape.ShellSize.x <= 0 || shape.ShellSize.y <= 0 || shape.ShellThickness <= 0)
+                return CellRect.Empty;
 
-                case ShapeKind.Disc:
-                {
-                    if (shape.DiscRadius < 0) return CellRect.Empty;
+            var min = origin + shape.ShellMin;
+            return new CellRect(min, min + shape.ShellSize);
+        }
 
-                    var center = origin + shape.DiscCenter;
-                    var r = shape.DiscRadius;
-                    return new CellRect(center - new int2(r, r), center + new int2(r + 1, r + 1));
-                }
+        private static CellRect BoundsDisc(in InfluenceShape shape, int2 origin)
+        {
+            if (shape.DiscRadius < 0) return CellRect.Empty;
 
-                case ShapeKind.Annulus:
-                {
-                    if (shape.AnnulusOuterRadius < 0 || shape.AnnulusInnerRadius >= shape.AnnulusOuterRadius)
-                        return CellRect.Empty;
+            var center = origin + shape.DiscCenter;
+            var r = shape.DiscRadius;
+            return new CellRect(center - new int2(r, r), center + new int2(r + 1, r + 1));
+        }
 
-                    var center = origin + shape.AnnulusCenter;
-                    var r = shape.AnnulusOuterRadius;
-                    return new CellRect(center - new int2(r, r), center + new int2(r + 1, r + 1));
-                }
+        private static CellRect BoundsAnnulus(in InfluenceShape shape, int2 origin)
+        {
+            if (shape.AnnulusOuterRadius < 0 || shape.AnnulusInnerRadius >= shape.AnnulusOuterRadius)
+                return CellRect.Empty;
 
-                case ShapeKind.Capsule:
-                {
-                    if (shape.CapsuleRadius < 0) return CellRect.Empty;
+            var center = origin + shape.AnnulusCenter;
+            var r = shape.AnnulusOuterRadius;
+            return new CellRect(center - new int2(r, r), center + new int2(r + 1, r + 1));
+        }
 
-                    var r = shape.CapsuleRadius;
-                    var a = origin + shape.CapsuleStart;
-                    var b = origin + shape.CapsuleEnd;
-                    return new CellRect(math.min(a, b) - new int2(r, r), math.max(a, b) + new int2(r + 1, r + 1));
-                }
+        private static CellRect BoundsCapsule(in InfluenceShape shape, int2 origin)
+        {
+            if (shape.CapsuleRadius < 0) return CellRect.Empty;
 
-                case ShapeKind.Ellipse:
-                {
-                    if (shape.EllipseRadii.x < 0 || shape.EllipseRadii.y < 0) return CellRect.Empty;
+            var r = shape.CapsuleRadius;
+            var a = origin + shape.CapsuleStart;
+            var b = origin + shape.CapsuleEnd;
+            return new CellRect(math.min(a, b) - new int2(r, r), math.max(a, b) + new int2(r + 1, r + 1));
+        }
 
-                    var center = origin + shape.EllipseCenter;
-                    var radii = shape.EllipseRadii;
-                    return new CellRect(center - radii, center + radii + new int2(1, 1));
-                }
+        private static CellRect BoundsEllipse(in InfluenceShape shape, int2 origin)
+        {
+            if (shape.EllipseRadii.x < 0 || shape.EllipseRadii.y < 0) return CellRect.Empty;
 
-                case ShapeKind.RoundedRect:
-                {
-                    if (shape.RoundedRectSize.x <= 0 || shape.RoundedRectSize.y <= 0 || shape.RoundedRectRadius < 0)
-                        return CellRect.Empty;
+            var center = origin + shape.EllipseCenter;
+            var radii = shape.EllipseRadii;
+            return new CellRect(center - radii, center + radii + new int2(1, 1));
+        }
 
-                    var min = origin + shape.RoundedRectMin;
-                    return new CellRect(min, min + shape.RoundedRectSize);
-                }
+        private static CellRect BoundsRoundedRect(in InfluenceShape shape, int2 origin)
+        {
+            if (shape.RoundedRectSize.x <= 0 || shape.RoundedRectSize.y <= 0 || shape.RoundedRectRadius < 0)
+                return CellRect.Empty;
 
-                case ShapeKind.ThickLine:
-                {
-                    if (shape.ThickLineRadius < 0) return CellRect.Empty;
+            var min = origin + shape.RoundedRectMin;
+            return new CellRect(min, min + shape.RoundedRectSize);
+        }
 
-                    var r = shape.ThickLineRadius;
-                    var a = origin + shape.ThickLineStart;
-                    var b = origin + shape.ThickLineEnd;
-                    return new CellRect(math.min(a, b) - new int2(r, r), math.max(a, b) + new int2(r + 1, r + 1));
-                }
+        private static CellRect BoundsThickLine(in InfluenceShape shape, int2 origin)
+        {
+            if (shape.ThickLineRadius < 0) return CellRect.Empty;
 
-                case ShapeKind.Sector:
-                {
-                    if (shape.SectorRadius < 0) return CellRect.Empty;
+            var r = shape.ThickLineRadius;
+            var a = origin + shape.ThickLineStart;
+            var b = origin + shape.ThickLineEnd;
+            return new CellRect(math.min(a, b) - new int2(r, r), math.max(a, b) + new int2(r + 1, r + 1));
+        }
 
-                    var center = origin + shape.SectorCenter;
-                    var r = shape.SectorRadius;
-                    return new CellRect(center - new int2(r, r), center + new int2(r + 1, r + 1));
-                }
+        private static CellRect BoundsSector(in InfluenceShape shape, int2 origin)
+        {
+            if (shape.SectorRadius < 0) return CellRect.Empty;
 
-                default:
-                    return CellRect.Empty;
-            }
+            var center = origin + shape.SectorCenter;
+            var r = shape.SectorRadius;
+            return new CellRect(center - new int2(r, r), center + new int2(r + 1, r + 1));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

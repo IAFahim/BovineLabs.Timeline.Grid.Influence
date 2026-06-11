@@ -142,67 +142,75 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int EstimateSpanCount(in InfluenceShape shape)
         {
-            switch (shape.Kind)
+            return shape.Kind switch
             {
-                case ShapeKind.SolidRect:
-                    return shape.RectSize.x > 0 && shape.RectSize.y > 0 ? 1 : 0;
+                ShapeKind.SolidRect => EstimateSolidRect(in shape),
+                ShapeKind.RectShell => EstimateRectShell(in shape),
+                ShapeKind.Disc => DiscRowCount(shape.DiscRadius),
+                ShapeKind.Annulus => EstimateAnnulus(in shape),
+                ShapeKind.Capsule => EstimateCapsule(in shape),
+                ShapeKind.Ellipse => EstimateEllipse(in shape),
+                ShapeKind.RoundedRect => EstimateRoundedRect(in shape),
+                ShapeKind.ThickLine => EstimateThickLine(in shape),
+                ShapeKind.Sector => EstimateSector(in shape),
+                _ => 0
+            };
+        }
 
-                case ShapeKind.RectShell:
-                {
-                    if (shape.ShellSize.x <= 0 || shape.ShellSize.y <= 0 || shape.ShellThickness <= 0) return 0;
+        private static int EstimateSolidRect(in InfluenceShape shape)
+        {
+            return shape.RectSize.x > 0 && shape.RectSize.y > 0 ? 1 : 0;
+        }
 
-                    var inner = shape.ShellSize - new int2(2 * shape.ShellThickness, 2 * shape.ShellThickness);
-                    return inner.x > 0 && inner.y > 0 ? 2 : 1;
-                }
+        private static int EstimateRectShell(in InfluenceShape shape)
+        {
+            if (shape.ShellSize.x <= 0 || shape.ShellSize.y <= 0 || shape.ShellThickness <= 0) return 0;
 
-                case ShapeKind.Disc:
-                    return DiscRowCount(shape.DiscRadius);
+            var inner = shape.ShellSize - new int2(2 * shape.ShellThickness, 2 * shape.ShellThickness);
+            return inner.x > 0 && inner.y > 0 ? 2 : 1;
+        }
 
-                case ShapeKind.Annulus:
-                {
-                    if (shape.AnnulusOuterRadius < 0 || shape.AnnulusInnerRadius >= shape.AnnulusOuterRadius) return 0;
+        private static int EstimateAnnulus(in InfluenceShape shape)
+        {
+            if (shape.AnnulusOuterRadius < 0 || shape.AnnulusInnerRadius >= shape.AnnulusOuterRadius) return 0;
 
-                    var inner = shape.AnnulusInnerRadius >= 0 ? 2 * shape.AnnulusInnerRadius + 1 : 0;
-                    return IntegerMath.SaturatingAdd(2 * shape.AnnulusOuterRadius + 1, inner);
-                }
+            var inner = shape.AnnulusInnerRadius >= 0 ? 2 * shape.AnnulusInnerRadius + 1 : 0;
+            return IntegerMath.SaturatingAdd(2 * shape.AnnulusOuterRadius + 1, inner);
+        }
 
-                case ShapeKind.Capsule:
-                {
-                    if (shape.CapsuleRadius < 0) return 0;
+        private static int EstimateCapsule(in InfluenceShape shape)
+        {
+            if (shape.CapsuleRadius < 0) return 0;
 
-                    var spanY = math.abs((long)shape.CapsuleEnd.y - shape.CapsuleStart.y);
-                    return IntegerMath.ClampToInt(spanY + 2L * shape.CapsuleRadius + 3L);
-                }
+            var spanY = math.abs((long)shape.CapsuleEnd.y - shape.CapsuleStart.y);
+            return IntegerMath.ClampToInt(spanY + 2L * shape.CapsuleRadius + 3L);
+        }
 
-                case ShapeKind.Ellipse:
-                {
-                    if (shape.EllipseRadii.x < 0 || shape.EllipseRadii.y < 0) return 0;
+        private static int EstimateEllipse(in InfluenceShape shape)
+        {
+            if (shape.EllipseRadii.x < 0 || shape.EllipseRadii.y < 0) return 0;
 
-                    return IntegerMath.ClampToInt(2L * shape.EllipseRadii.y + 1L);
-                }
+            return IntegerMath.ClampToInt(2L * shape.EllipseRadii.y + 1L);
+        }
 
-                case ShapeKind.RoundedRect:
-                {
-                    if (shape.RoundedRectSize.x <= 0 || shape.RoundedRectSize.y <= 0 ||
-                        shape.RoundedRectRadius < 0) return 0;
+        private static int EstimateRoundedRect(in InfluenceShape shape)
+        {
+            if (shape.RoundedRectSize.x <= 0 || shape.RoundedRectSize.y <= 0 || shape.RoundedRectRadius < 0) return 0;
 
-                    return shape.RoundedRectSize.y;
-                }
+            return shape.RoundedRectSize.y;
+        }
 
-                case ShapeKind.ThickLine:
-                {
-                    if (shape.ThickLineRadius < 0) return 0;
+        private static int EstimateThickLine(in InfluenceShape shape)
+        {
+            if (shape.ThickLineRadius < 0) return 0;
 
-                    var spanY = math.abs((long)shape.ThickLineEnd.y - shape.ThickLineStart.y);
-                    return IntegerMath.ClampToInt(spanY + 2L * shape.ThickLineRadius + 3L);
-                }
+            var spanY = math.abs((long)shape.ThickLineEnd.y - shape.ThickLineStart.y);
+            return IntegerMath.ClampToInt(spanY + 2L * shape.ThickLineRadius + 3L);
+        }
 
-                case ShapeKind.Sector:
-                    return shape.SectorRadius < 0 ? 0 : IntegerMath.ClampToInt(2L * shape.SectorRadius + 1L);
-
-                default:
-                    return 0;
-            }
+        private static int EstimateSector(in InfluenceShape shape)
+        {
+            return shape.SectorRadius < 0 ? 0 : IntegerMath.ClampToInt(2L * shape.SectorRadius + 1L);
         }
 
         public static void Emit(in Stamp stamp, ref SpanSink sink)

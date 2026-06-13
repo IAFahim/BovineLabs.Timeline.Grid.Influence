@@ -6,6 +6,7 @@ using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using BovineLabs.Timeline.Grid.Influence.Data.Builders;
+using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.Timeline;
@@ -23,8 +24,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
         public GridCompositeSchemaObject Composite;
 
-        [Header("Semantics")] public GridFieldCategory Category = GridFieldCategory.Generic;
-
+        [Header("Semantics")]
+        [Tooltip("Additive adds the stamp/composite weights to the field; Subtractive negates them.")]
         public Polarity Polarity = Polarity.Additive;
 
         [Header("Footprint")] public Quarter Rotation = Quarter.R0;
@@ -41,6 +42,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
         public EntityLinkSchema originLink;
 
+        [Header("Display")]
+        [Tooltip("Editor-only: tints the clip and gizmo for visual grouping. Has no effect on runtime field routing, which is determined solely by the assigned Field schema.")]
+        public GridFieldCategory Category = GridFieldCategory.Generic;
+
         public override double duration => 1.0;
         public ClipCaps clipCaps => ClipCaps.Blending | ClipCaps.Looping;
 
@@ -53,12 +58,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             DependOnStamps(context);
             BindOriginTransform(context);
 
-            // Build the composite blob if a composite schema is assigned.
             var compositeBlob = default(BlobAssetReference<CompositeShapeBlob>);
-            if (Composite != null)
+            if (Composite != null && Composite.Base != null)
             {
                 context.Baker.DependsOn(Composite);
-                if (Composite.TryBuild(out compositeBlob))
+                if (TryBuildComposite(out compositeBlob))
                     context.Baker.AddBlobAsset(ref compositeBlob, out _);
                 else
                     compositeBlob = default;
@@ -86,6 +90,22 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 buffer.Add(new InfluenceStampElement { Shape = shapes[i] });
 
             base.Bake(clipEntity, context);
+        }
+
+        private bool TryBuildComposite(out BlobAssetReference<CompositeShapeBlob> blob)
+        {
+            var baseShape = Composite.Base.BuildShape(1f).WithWeight(1);
+            var weights = Composite.Profile.SampleDepthWeights(baseShape, Allocator.Temp);
+
+            var sign = Polarity.Sign();
+            if (sign != 1)
+                for (var i = 0; i < weights.Length; i++)
+                    weights[i] *= sign;
+
+            blob = CompositeBaker.Build(baseShape, weights, Allocator.Persistent);
+            weights.Dispose();
+
+            return blob.IsCreated && blob.Value.Layers.Length > 0;
         }
 
         private bool HasSchemas()

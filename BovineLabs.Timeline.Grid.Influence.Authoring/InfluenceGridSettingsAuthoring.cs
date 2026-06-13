@@ -11,9 +11,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
     [SettingsGroup("Grid")]
     public class InfluenceGridSettingsAuthoring : SettingsBase
     {
+        [Tooltip("World-space size of one grid cell. Clamped to a minimum of 0.01.")]
         public float CellSize = 1f;
+
+        [Tooltip("Normal of the plane the grid is projected onto.")]
         public Vector3 PlaneNormal = Vector3.up;
-        public int StrideAlignment = 4;
+
+        [Min(8)]
+        [Tooltip("Row stride alignment (elements) for each field's grid. Floored at 8 and rounded up to the next power of two, so values below 8 are promoted to 8.")]
+        public int StrideAlignment = 8;
 
         public GridFieldSchemaObject[] Fields = Array.Empty<GridFieldSchemaObject>();
         public GridStampSchemaObject[] Stamps = Array.Empty<GridStampSchemaObject>();
@@ -25,8 +31,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             baker.AddComponent(entity, new InfluenceGridSettings
             {
                 CellSize = math.max(0.01f, CellSize),
-                PlaneNormal = math.normalizesafe(PlaneNormal, math.up()),
-                StrideAlignment = StrideAlignment
+                PlaneNormal = math.normalizesafe(PlaneNormal, math.up())
             });
 
             var buffer = baker.AddBuffer<GridFieldConfigData>(entity);

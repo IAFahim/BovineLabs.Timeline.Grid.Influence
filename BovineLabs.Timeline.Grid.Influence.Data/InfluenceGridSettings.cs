@@ -7,6 +7,5 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
     {
         public float CellSize;
         public float3 PlaneNormal;
-        public int StrideAlignment;
     }
 }

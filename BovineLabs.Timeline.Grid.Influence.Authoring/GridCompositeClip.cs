@@ -95,11 +95,28 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 hi *= 0x9E3779B9u;
             }
 
+            Fold(ref lo, ref hi, (uint)baseShape.RectMin.x);
+            Fold(ref lo, ref hi, (uint)baseShape.RectMin.y);
+            Fold(ref lo, ref hi, (uint)baseShape.RectSize.x);
+            Fold(ref lo, ref hi, (uint)baseShape.RectSize.y);
+            Fold(ref lo, ref hi, (uint)baseShape.ShellThickness);
+            Fold(ref lo, ref hi, (uint)baseShape.AnnulusInnerRadius);
+            Fold(ref lo, ref hi, (uint)baseShape.SectorDir1.x);
+            Fold(ref lo, ref hi, (uint)baseShape.SectorDir1.y);
+
             return new Hash128(
                 (uint)baseShape.Kind ^ lo,
                 (uint)baseShape.Weight ^ hi,
                 lo,
                 hi);
+        }
+
+        private static void Fold(ref uint lo, ref uint hi, uint value)
+        {
+            lo ^= value;
+            lo *= 0x01000193u;
+            hi ^= value;
+            hi *= 0x9E3779B9u;
         }
 
         private bool HasSchemas()

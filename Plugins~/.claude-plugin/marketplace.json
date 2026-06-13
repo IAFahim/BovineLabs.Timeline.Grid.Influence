@@ -1,0 +1,13 @@
+{
+  "name": "bovinelabs-timeline-grid-influence",
+  "owner": {
+    "name": "BovineLabs"
+  },
+  "plugins": [
+    {
+      "name": "bovinelabs-timeline-grid-influence",
+      "source": "./",
+      "description": "Vex Unity agent skills shipped with BovineLabs Timeline Grid Influence."
+    }
+  ]
+}

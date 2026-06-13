@@ -1,0 +1,7 @@
+[
+  {
+    "id": "unity-track-grid-influence",
+    "displayName": "Track Grid Influence",
+    "description": "Master of the BovineLabs.Timeline.Grid.Influence track family — GridInfluenceTrack/GridCompositeTrack stamp integer weight shapes into a named 2D influence field, GridFlowSteeringTrack physically slides a body up/down the field's gradient, GridInfluenceQueryTrack samples value+gradient into a result component for AI/Reactions. Covers the GridFieldSchemaObject routing key, stamp shapes, Polarity/Falloff/Rotation, decay+diffusion field config, and Target/EntityLink origin routing. Portable to any project containing the package; worked example from vex-ee. Use when a designer asks to \"paint a danger/threat/vision/objective field on the floor over time\", \"make this drift toward the safest/hottest cell\", or \"read how dangerous my spot is right now\"."
+  }
+]

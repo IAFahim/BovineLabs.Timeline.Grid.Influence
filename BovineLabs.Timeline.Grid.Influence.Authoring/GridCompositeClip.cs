@@ -83,7 +83,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
         private static Hash128 ContentHash(InfluenceShape baseShape, NativeArray<int> weights)
         {
-            // Fold all weights into two uint seeds so any weight change produces a different hash.
             uint lo = 0x811c9dc5u;
             uint hi = 0x6a09e667u;
             for (var i = 0; i < weights.Length; i++)

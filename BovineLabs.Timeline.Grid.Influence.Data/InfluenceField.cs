@@ -29,7 +29,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         private NativeArray<byte> _emptyBytes;
 
         private GridSpec _spec;
-        private Allocator _allocator;
         private JobHandle _dependency;
 
         public bool IsCreated => _data.IsCreated;
@@ -60,7 +59,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 _emptyBytes = new NativeArray<byte>(0, allocator),
                 _spec = spec,
                 FrameId = 1,
-                _allocator = allocator,
                 _dependency = default
             };
         }

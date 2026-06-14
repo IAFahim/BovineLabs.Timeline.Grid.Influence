@@ -10,7 +10,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data.Flows
     public struct FlowField : INativeDisposable
     {
         private NativeList<int2> _direction;
-        private Allocator _allocator;
         private JobHandle _dependency;
 
         public bool IsCreated => _direction.IsCreated;
@@ -21,7 +20,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data.Flows
             return new FlowField
             {
                 _direction = new NativeList<int2>(64, allocator),
-                _allocator = allocator,
                 _dependency = default
             };
         }

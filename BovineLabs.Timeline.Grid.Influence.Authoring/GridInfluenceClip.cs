@@ -57,6 +57,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 return;
 
             context.Baker.DependsOn(Field);
+            context.Baker.DependsOn(originLink);
             DependOnStamps(context);
             BindOriginTransform(context);
 

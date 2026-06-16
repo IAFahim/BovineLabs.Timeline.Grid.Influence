@@ -66,7 +66,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Outflow(int value, int decayPerMille, int spreadDenominator)
         {
-            return DecayKeep(value, decayPerMille) / spreadDenominator;
+            // Guard against integer divide-by-zero (and negative denominators) from unvalidated runtime config.
+            return DecayKeep(value, decayPerMille) / (spreadDenominator < 1 ? 1 : spreadDenominator);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

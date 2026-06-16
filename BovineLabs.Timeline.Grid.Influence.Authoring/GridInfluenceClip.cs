@@ -34,7 +34,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public int FalloffSteps = 3;
         public int FalloffSpacing = 2;
 
-        [Header("Transform")] public float WeightMultiplier = 1.0f;
+        [Header("Transform")]
+        [Tooltip("Scales stamp weights. On composite clips it scales the per-depth CUMULATIVE weights (rounded per layer), so inter-layer deltas can differ slightly from the single-stamp path.")]
+        public float WeightMultiplier = 1.0f;
 
         public Vector3 LocalOffset;
 
@@ -97,10 +99,19 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             var baseShape = Composite.Base.BuildShape(1f).WithWeight(1);
             var weights = Composite.Profile.SampleDepthWeights(baseShape, Allocator.Temp);
 
+            // Apply WeightMultiplier to the composite layers too, matching the stamp path
+            // (GridInfluenceExpansion scales by WeightMultiplier * Polarity.Sign()); otherwise a
+            // WeightMultiplier set on a composite clip is silently ignored.
             var sign = Polarity.Sign();
-            if (sign != 1)
-                for (var i = 0; i < weights.Length; i++)
-                    weights[i] *= sign;
+            var anyNonZero = false;
+            for (var i = 0; i < weights.Length; i++)
+            {
+                weights[i] = Mathf.RoundToInt(weights[i] * WeightMultiplier) * sign;
+                anyNonZero |= weights[i] != 0;
+            }
+
+            if (!anyNonZero && weights.Length > 0)
+                Debug.LogWarning($"GridInfluenceClip '{name}' WeightMultiplier ({WeightMultiplier}) rounded every composite layer weight to 0; the composite contributes nothing. Raise WeightMultiplier or the base weights.", this);
 
             blob = CompositeBaker.Build(baseShape, weights, Allocator.Persistent);
             weights.Dispose();

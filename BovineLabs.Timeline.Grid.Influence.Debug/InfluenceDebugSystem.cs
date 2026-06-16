@@ -224,7 +224,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
             private const float RenderHeight = 0.07f;
 
-            public void Execute(in TrackBinding binding, in InfluenceClipData clip, in ClipWeight weight)
+            public void Execute(in TrackBinding binding, in InfluenceClipData clip, in ClipWeight weight,
+                in DynamicBuffer<InfluenceStampElement> extras)
             {
                 var targetEntity = binding.Value;
                 if (targetEntity == Entity.Null) return;
@@ -245,13 +246,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
                 if (!LocalToWorldLookup.TryGetComponent(originEntity, out var localToWorld)) return;
 
-                var scaledWeight = (int)math.round(clip.Shape.Weight * weight.Value);
-                if (scaledWeight == 0) return;
-
-                var shape = clip.Shape.WithWeight(scaledWeight);
-                var color = shape.Weight >= 0 ? PositiveColor : NegativeColor;
-                color.a *= 0.8f;
-
                 var origin = localToWorld.Position + math.rotate(localToWorld.Rotation, clip.LocalOffset);
                 var projected = Basis.ToGridSpace(origin);
 
@@ -261,6 +255,32 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
                 // Draw stamps on the same debug plane as the grid, not at entity height.
                 var heightOffset = RenderHeight;
+
+                // Mirror GridInfluenceApplySystem exactly: composite layers XOR the primary shape
+                // (if/else, never both), then always the ExtraStamps elements.
+                if (clip.Composite.IsCreated)
+                {
+                    ref var layers = ref clip.Composite.Value.Layers;
+                    for (var i = 0; i < layers.Length; i++)
+                        DrawShape(layers[i], weight.Value, gridOrigin, heightOffset);
+                }
+                else
+                {
+                    DrawShape(clip.Shape, weight.Value, gridOrigin, heightOffset);
+                }
+
+                for (var i = 0; i < extras.Length; i++)
+                    DrawShape(extras[i].Shape, weight.Value, gridOrigin, heightOffset);
+            }
+
+            private void DrawShape(in InfluenceShape rawShape, float weightValue, int2 gridOrigin, float heightOffset)
+            {
+                var scaledWeight = (int)math.round(rawShape.Weight * weightValue);
+                if (scaledWeight == 0) return;
+
+                var shape = rawShape.WithWeight(scaledWeight);
+                var color = shape.Weight >= 0 ? PositiveColor : NegativeColor;
+                color.a *= 0.8f;
 
                 // Cull stamps whose shape bounds are outside the camera frustum.
                 if (!IsStampVisible(gridOrigin, shape, heightOffset))

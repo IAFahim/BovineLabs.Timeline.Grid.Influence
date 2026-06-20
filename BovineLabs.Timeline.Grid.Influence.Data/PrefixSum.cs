@@ -35,6 +35,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         private static void HorizontalPassAvx2(int* field, int stride, int dimension)
         {
+            // Burst needs the IsSupported check in the same method as the intrinsics (call-site guard doesn't propagate).
+            if (!Avx2.IsAvx2Supported)
+                return;
+
             var broadcastLane3 = Avx.mm256_set1_epi32(3);
             var highHalfMask = Avx.mm256_setr_epi32(0, 0, 0, 0, -1, -1, -1, -1);
 
@@ -68,6 +72,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         private static void VerticalPassAvx2(int* field, int stride, int dimension)
         {
+            // Burst needs the IsSupported check in the same method as the intrinsics (call-site guard doesn't propagate).
+            if (!Avx2.IsAvx2Supported)
+                return;
+
             for (var y = 1; y < dimension; y++)
             {
                 var above = field + (y - 1) * stride;
@@ -83,6 +91,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         private static void VerticalPassNeon(int* field, int stride, int dimension)
         {
+            // Burst needs the IsSupported check in the same method as the intrinsics (call-site guard doesn't propagate).
+            if (!Neon.IsNeonSupported)
+                return;
+
             for (var y = 1; y < dimension; y++)
             {
                 var above = field + (y - 1) * stride;

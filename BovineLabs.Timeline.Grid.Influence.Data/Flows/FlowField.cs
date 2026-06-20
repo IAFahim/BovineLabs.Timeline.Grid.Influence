@@ -33,12 +33,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Data.Flows
             var resize = new ResizeJob
             {
                 Direction = _direction,
-                SourceLength = source.DataLength
+                Source = source.DataDeferred
             }.Schedule(combined);
 
             var resolve = new ResolveJob
             {
-                Reader = source.AsReader(),
+                Reader = source.AsDeferredReader(),
                 ActiveSlots = source.ActiveSlotsDeferred,
                 CoordBySlot = source.CoordBySlotDeferred,
                 Direction = _direction.AsDeferredJobArray(),
@@ -59,6 +59,26 @@ namespace BovineLabs.Timeline.Grid.Influence.Data.Flows
                 _direction.AsArray(),
                 source.Spec,
                 source.FrameId);
+        }
+
+        // Job-safe reader: backing arrays resolve at job execution, so this is valid to capture into a
+        // job scheduled after Resolve without a main-thread Complete.
+        internal FlowReader AsDeferredReader(ref InfluenceField source)
+        {
+            ThrowIfNotCreated();
+            return new FlowReader(
+                source.SlotByCoordReadOnly,
+                source.LastWrittenBySlotDeferred,
+                _direction.AsDeferredJobArray(),
+                source.Spec,
+                source.FrameId);
+        }
+
+        // Register a downstream reader (e.g. a steering job) so next frame's Resolve waits for it before
+        // resizing/overwriting the direction cache.
+        internal void PublishDependency(JobHandle handle)
+        {
+            _dependency = JobHandle.CombineDependencies(_dependency, handle);
         }
 
         public void Complete()
@@ -93,12 +113,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Data.Flows
         private struct ResizeJob : IJob
         {
             public NativeList<int2> Direction;
-            public int SourceLength;
+            [ReadOnly] public NativeArray<int> Source;
 
             public void Execute()
             {
-                if (Direction.Length != SourceLength)
-                    Direction.Resize(SourceLength, NativeArrayOptions.ClearMemory);
+                if (Direction.Length != Source.Length)
+                    Direction.Resize(Source.Length, NativeArrayOptions.ClearMemory);
             }
         }
 

@@ -260,9 +260,16 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 // (if/else, never both), then always the ExtraStamps elements.
                 if (clip.Composite.IsCreated)
                 {
-                    ref var layers = ref clip.Composite.Value.Layers;
-                    for (var i = 0; i < layers.Length; i++)
-                        DrawShape(layers[i], weight.Value, gridOrigin, heightOffset);
+                    ref var composite = ref clip.Composite.Value;
+
+                    // Cull the whole multi-layer composite at once before touching individual layers.
+                    var bounds = CompositeShapeReader.Bounds(ref composite, int2.zero);
+                    if (!CullToCamera || (!bounds.IsEmpty && RectVisible(gridOrigin, bounds.Min, bounds.Max, heightOffset)))
+                    {
+                        ref var layers = ref composite.Layers;
+                        for (var i = 0; i < layers.Length; i++)
+                            DrawShape(layers[i], weight.Value, gridOrigin, heightOffset);
+                    }
                 }
                 else
                 {
@@ -338,9 +345,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 if (!CullToCamera)
                     return true;
 
-                if (!TryGetShapeBounds(shape, out var minCell, out var maxCell))
-                    return false;
+                return TryGetShapeBounds(shape, out var minCell, out var maxCell) &&
+                       RectVisible(gridOrigin, minCell, maxCell, heightOffset);
+            }
 
+            private bool RectVisible(int2 gridOrigin, int2 minCell, int2 maxCell, float heightOffset)
+            {
                 var minGrid = new float2(gridOrigin.x + minCell.x, gridOrigin.y + minCell.y) * CellSize;
                 var maxGrid = new float2(gridOrigin.x + maxCell.x, gridOrigin.y + maxCell.y) * CellSize;
 

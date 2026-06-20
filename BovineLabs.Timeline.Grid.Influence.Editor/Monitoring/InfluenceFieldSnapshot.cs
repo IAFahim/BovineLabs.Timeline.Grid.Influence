@@ -183,7 +183,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             var spec = field.Spec;
             var activeSlots = field.ActiveSlotsList.AsArray();
             var coordBySlot = field.CoordBySlotList.AsArray();
-            var data = field.DataList.AsArray();
+            var reader = field.AsReader();
 
             var count = math.min(activeSlots.Length, math.max(0, maxCapturedChunks));
             var chunks = new List<ChunkSnapshot>(count);
@@ -208,17 +208,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 var nonZero = 0;
                 var chunkHasValue = false;
 
-                var sourceBase = slot * spec.ElementsPerChunk;
+                if (!reader.TryGetChunk(coord, out var view))
+                    continue;
 
                 for (var y = 0; y < spec.ChunkSize; y++)
                 for (var x = 0; x < spec.ChunkSize; x++)
                 {
-                    var sourceIndex = sourceBase + y * spec.Stride + x;
-
-                    if ((uint)sourceIndex >= (uint)data.Length)
-                        continue;
-
-                    var value = data[sourceIndex];
+                    var value = view.ReadLocal(new int2(x, y));
                     cells[y * spec.ChunkSize + x] = value;
 
                     if (!chunkHasValue)

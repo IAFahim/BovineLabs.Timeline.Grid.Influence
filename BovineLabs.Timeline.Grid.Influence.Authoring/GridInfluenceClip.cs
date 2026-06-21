@@ -71,15 +71,28 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                     compositeBlob = default;
             }
 
-            var shapes = new List<InfluenceShape>(1 + (ExtraStamps?.Length ?? 0));
-            GridInfluenceExpansion.Collect(this, shapes);
-            if (shapes.Count == 0 && !compositeBlob.IsCreated)
+            var hasComposite = compositeBlob.IsCreated;
+
+            // A Composite supplies the primary footprint and supersedes the (mandatory) Stamp entirely, so only
+            // expand the primary stamp when there is no composite. The runtime consumes builder.Shape only on the
+            // no-composite path; everything in the buffer always stacks. Keeping primary and extras separate stops
+            // a multi-span primary (painted/ringed) from leaking its tail spans into the buffer under a composite.
+            var primaryShapes = new List<InfluenceShape>(1);
+            if (!hasComposite)
+                GridInfluenceExpansion.CollectStamp(this, Stamp, primaryShapes);
+
+            var extraShapes = new List<InfluenceShape>(ExtraStamps?.Length ?? 0);
+            if (ExtraStamps != null)
+                foreach (var extra in ExtraStamps)
+                    GridInfluenceExpansion.CollectStamp(this, extra, extraShapes);
+
+            if (primaryShapes.Count == 0 && extraShapes.Count == 0 && !hasComposite)
                 return;
 
             var builder = new GridInfluenceBuilder
             {
                 FieldKey = Field.Id,
-                Shape = shapes.Count > 0 ? shapes[0] : default,
+                Shape = primaryShapes.Count > 0 ? primaryShapes[0] : default,
                 Composite = compositeBlob,
                 LocalOffset = LocalOffset,
                 OriginTarget = originTarget,
@@ -89,14 +102,27 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             builder.ApplyTo(ref commands);
 
             var buffer = commands.AddBuffer<InfluenceStampElement>();
-            for (var i = 1; i < shapes.Count; i++)
-                buffer.Add(new InfluenceStampElement { Shape = shapes[i] });
+            for (var i = 1; i < primaryShapes.Count; i++)
+                buffer.Add(new InfluenceStampElement { Shape = primaryShapes[i] });
+            foreach (var extra in extraShapes)
+                buffer.Add(new InfluenceStampElement { Shape = extra });
 
             base.Bake(clipEntity, context);
         }
 
         private bool TryBuildComposite(out BlobAssetReference<CompositeShapeBlob> blob)
         {
+            blob = default;
+
+            // The composite system erodes/insets a single parametric shape; a painted base has no single-shape
+            // form (BuildShape returns only its bounding rect), so it would silently bake as a solid block.
+            if (Composite.Base.Kind == ShapeKind.Painted)
+            {
+                Debug.LogWarning($"GridInfluenceClip '{name}' uses a Painted stamp as its Composite base. " +
+                    "Painted stamps have no composite form; the composite is skipped. Use a parametric base shape.", this);
+                return false;
+            }
+
             var baseShape = Composite.Base.BuildShape(1f).WithWeight(1);
             var weights = Composite.Profile.SampleDepthWeights(baseShape, Allocator.Temp);
 

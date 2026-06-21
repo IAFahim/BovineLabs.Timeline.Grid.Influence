@@ -380,18 +380,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             _lastTextureHash = hash;
 
             var size = _snapshot.Spec.ChunkSize;
-
-            if (_chunkTexture == null || _chunkTexture.width != size || _chunkTexture.height != size)
-            {
-                DestroyPreviewTexture();
-
-                _chunkTexture = new Texture2D(size, size, TextureFormat.RGBA32, false)
-                {
-                    filterMode = FilterMode.Point,
-                    wrapMode = TextureWrapMode.Clamp,
-                    hideFlags = HideFlags.HideAndDontSave
-                };
-            }
+            EnsurePreviewTexture(size);
 
             var absMax = ComputeAbsMax(chunk);
             var pixels = new Color32[size * size];
@@ -405,6 +394,21 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
 
             _chunkTexture.SetPixels32(pixels);
             _chunkTexture.Apply(false, false);
+        }
+
+        private void EnsurePreviewTexture(int size)
+        {
+            if (_chunkTexture != null && _chunkTexture.width == size && _chunkTexture.height == size)
+                return;
+
+            DestroyPreviewTexture();
+
+            _chunkTexture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
         }
 
         private int ComputeAbsMax(InfluenceFieldSnapshot.ChunkSnapshot chunk)

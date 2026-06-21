@@ -2,6 +2,7 @@ using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using BovineLabs.Timeline.Grid.Influence.Data.Flows;
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -44,11 +45,18 @@ namespace BovineLabs.Timeline.Grid.Influence
                 if (!field.IsCreated)
                     continue;
 
-                var handle = JobHandle.CombineDependencies(dependency, field.Dependency, pair.WriterDependency);
+                var flow = pair.Flow;
+                if (!flow.IsCreated)
+                    flow = FlowField.Create(Allocator.Persistent);
+
+                var combined = JobHandle.CombineDependencies(dependency, field.Dependency, pair.WriterDependency);
+
+                // Bake the vector field once per frame; every steering agent on this field samples it.
+                var handle = flow.Resolve(ref field, combined);
 
                 handle = new SteerJob
                 {
-                    Reader = field.AsDeferredReader(),
+                    Flow = flow.AsDeferredReader(ref field),
                     FieldKey = pair.Config.Key,
                     CellSize = cellSize,
                     Basis = basis,
@@ -57,6 +65,8 @@ namespace BovineLabs.Timeline.Grid.Influence
                 }.Schedule(handle);
 
                 field.PublishDependency(handle);
+                flow.PublishDependency(handle);
+                pair.Flow = flow;
                 pair.Front = field;
                 dependency = handle;
             }
@@ -68,7 +78,7 @@ namespace BovineLabs.Timeline.Grid.Influence
         [WithAll(typeof(ClipActive))]
         private partial struct SteerJob : IJobEntity
         {
-            public FieldReader Reader;
+            public FlowReader Flow;
             public ushort FieldKey;
             public float CellSize;
             public GridBasis Basis;
@@ -91,7 +101,7 @@ namespace BovineLabs.Timeline.Grid.Influence
                     (int)math.floor(projected.x / CellSize),
                     (int)math.floor(projected.y / CellSize));
 
-                var gradient = data.Bias.Sign() * FieldGradient.Ascent(Reader, cell);
+                var gradient = data.Bias.Sign() * Flow.Sample(cell);
                 var planar = FieldGradient.Normalized(gradient);
                 if (math.all(planar == float2.zero))
                     return;

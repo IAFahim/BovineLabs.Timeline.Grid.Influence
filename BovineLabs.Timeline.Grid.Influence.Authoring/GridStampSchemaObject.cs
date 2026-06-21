@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using BovineLabs.Core.ObjectManagement;
 using BovineLabs.Core.PropertyDrawers;
 using BovineLabs.Timeline.Grid.Influence.Data;
@@ -56,7 +58,24 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public float SectorFacingDegrees = 90f;
         [Range(1f, 90f)] public float SectorHalfAngleDegrees = 30f;
 
+        [Header("Painted (freeform)")]
+        [Tooltip("Bottom-left cell of the paint canvas, in cells, relative to the stamp origin.")]
+        public Vector2Int PaintMin = new(-8, -8);
+
+        [Tooltip("Paint canvas size in cells. Changing this clears the canvas.")]
+        public Vector2Int PaintSize = new(16, 16);
+
+        [Tooltip("Weight applied by a left-drag. Right-drag erases (0). Negative paints subtractive weight.")]
+        public int PaintBrushWeight = 1;
+
+        [SerializeField] [HideInInspector] private int[] paintWeights = Array.Empty<int>();
+        [SerializeField] [HideInInspector] private int paintWidth;
+        [SerializeField] [HideInInspector] private int paintHeight;
+
         public ushort Id => (ushort)id;
+
+        /// <summary> Row-major painted weights, length PaintSize.x * PaintSize.y. Painted via the custom inspector canvas. </summary>
+        public int[] PaintWeights => paintWeights;
 
         private void OnValidate()
         {
@@ -72,12 +91,100 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             ThickLineRadius = math.max(0, ThickLineRadius);
             SectorRadius = math.max(0, SectorRadius);
             SectorHalfAngleDegrees = math.clamp(SectorHalfAngleDegrees, 1f, 90f);
+            PaintMin = new Vector2Int(math.clamp(PaintMin.x, -4096, 4096), math.clamp(PaintMin.y, -4096, 4096));
+            EnsurePaintBuffer();
+        }
+
+        /// <summary> Ensures the paint buffer matches PaintSize, preserving the overlapping painted region on resize. </summary>
+        public void EnsurePaintBuffer()
+        {
+            var sx = math.clamp(PaintSize.x, 1, 64);
+            var sy = math.clamp(PaintSize.y, 1, 64);
+            PaintSize = new Vector2Int(sx, sy);
+
+            var needed = sx * sy;
+
+            // Migrate assets saved before paintWidth/paintHeight existed: if the buffer already matches PaintSize,
+            // adopt those dims rather than treating the data as size-0 and wiping it.
+            if ((paintWidth == 0 || paintHeight == 0) && paintWeights != null && paintWeights.Length == needed)
+            {
+                paintWidth = sx;
+                paintHeight = sy;
+                return;
+            }
+
+            if (paintWeights != null && paintWeights.Length == needed && paintWidth == sx && paintHeight == sy)
+                return;
+
+            var old = paintWeights;
+            var resized = new int[needed];
+            if (old != null && paintWidth > 0 && paintHeight > 0 && old.Length == paintWidth * paintHeight)
+            {
+                var copyW = math.min(paintWidth, sx);
+                var copyH = math.min(paintHeight, sy);
+                for (var y = 0; y < copyH; y++)
+                for (var x = 0; x < copyW; x++)
+                    resized[x + (y * sx)] = old[x + (y * paintWidth)];
+            }
+
+            paintWeights = resized;
+            paintWidth = sx;
+            paintHeight = sy;
         }
 
         int IUID.ID
         {
             get => id;
             set => id = value;
+        }
+
+        /// <summary>
+        /// Expands this stamp into one or more shapes. Parametric kinds yield a single shape; the Painted
+        /// kind yields run-length-encoded SolidRect spans of the painted cells (so it rides the existing
+        /// multi-shape stamp pipeline and rotates per span).
+        /// </summary>
+        public void BuildShapes(float weightMultiplier, List<InfluenceShape> into)
+        {
+            if (Kind == ShapeKind.Painted)
+            {
+                BuildPainted(weightMultiplier, into);
+                return;
+            }
+
+            into.Add(BuildShape(weightMultiplier));
+        }
+
+        private void BuildPainted(float weightMultiplier, List<InfluenceShape> into)
+        {
+            EnsurePaintBuffer();
+
+            var sx = PaintSize.x;
+            var sy = PaintSize.y;
+            int2 min = new(PaintMin.x, PaintMin.y);
+
+            for (var y = 0; y < sy; y++)
+            {
+                var x = 0;
+                while (x < sx)
+                {
+                    var raw = paintWeights[x + (y * sx)];
+                    if (raw == 0)
+                    {
+                        x++;
+                        continue;
+                    }
+
+                    var runStart = x;
+                    x++;
+                    while (x < sx && paintWeights[x + (y * sx)] == raw)
+                        x++;
+
+                    var weight = (int)math.round(raw * weightMultiplier);
+                    if (weight != 0)
+                        into.Add(InfluenceShape.SolidRect(
+                            new int2(min.x + runStart, min.y + y), new int2(x - runStart, 1), weight));
+                }
+            }
         }
 
         public InfluenceShape BuildShape(float weightMultiplier)
@@ -113,6 +220,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 ShapeKind.Sector => InfluenceShape.Sector(sectorCenter, SectorRadius,
                     Ray(SectorFacingDegrees - SectorHalfAngleDegrees),
                     Ray(SectorFacingDegrees + SectorHalfAngleDegrees), weight),
+                // Painted has no single-shape form; this bounding rect is only a fallback for the composite-base path.
+                ShapeKind.Painted => InfluenceShape.SolidRect(
+                    new int2(PaintMin.x, PaintMin.y),
+                    new int2(math.max(0, PaintSize.x), math.max(0, PaintSize.y)), weight),
                 _ => InfluenceShape.Disc(discCenter, DiscRadius, weight)
             };
         }

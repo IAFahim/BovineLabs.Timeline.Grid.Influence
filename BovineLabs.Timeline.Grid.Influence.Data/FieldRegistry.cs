@@ -1,4 +1,5 @@
 using System;
+using BovineLabs.Timeline.Grid.Influence.Data.Flows;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
@@ -76,6 +77,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             {
                 ref var p = ref this.Slot(i);
                 p.WriterDependency.Complete();
+                if (p.Flow.IsCreated) p.Flow.Dispose();
                 if (p.Front.IsCreated) p.Front.Dispose();
                 if (p.DoubleBuffered && p.Back.IsCreated) p.Back.Dispose();
             }
@@ -92,6 +94,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public InfluenceField Front;
         public InfluenceField Back;
         public bool DoubleBuffered;
+
+        // Derived gradient cache, baked once per frame by GridFlowSteeringSystem and shared by every
+        // steering agent on this field. Lazily created the first frame the field is steered.
+        public FlowField Flow;
 
         public InfluenceField.StencilConfig PendingStencil;
         public JobHandle WriterDependency;

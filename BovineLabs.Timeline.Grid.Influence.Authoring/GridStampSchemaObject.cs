@@ -69,6 +69,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public int PaintBrushWeight = 1;
 
         [SerializeField] [HideInInspector] private int[] paintWeights = Array.Empty<int>();
+        [SerializeField] [HideInInspector] private int paintWidth;
+        [SerializeField] [HideInInspector] private int paintHeight;
 
         public ushort Id => (ushort)id;
 
@@ -89,10 +91,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             ThickLineRadius = math.max(0, ThickLineRadius);
             SectorRadius = math.max(0, SectorRadius);
             SectorHalfAngleDegrees = math.clamp(SectorHalfAngleDegrees, 1f, 90f);
+            PaintMin = new Vector2Int(math.clamp(PaintMin.x, -4096, 4096), math.clamp(PaintMin.y, -4096, 4096));
             EnsurePaintBuffer();
         }
 
-        // ponytail: resizing the canvas clears the paint (no old-dimension bookkeeping). Size first, then paint.
+        /// <summary> Ensures the paint buffer matches PaintSize, preserving the overlapping painted region on resize. </summary>
         public void EnsurePaintBuffer()
         {
             var sx = math.clamp(PaintSize.x, 1, 64);
@@ -100,10 +103,33 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             PaintSize = new Vector2Int(sx, sy);
 
             var needed = sx * sy;
-            if (paintWeights != null && paintWeights.Length == needed)
+
+            // Migrate assets saved before paintWidth/paintHeight existed: if the buffer already matches PaintSize,
+            // adopt those dims rather than treating the data as size-0 and wiping it.
+            if ((paintWidth == 0 || paintHeight == 0) && paintWeights != null && paintWeights.Length == needed)
+            {
+                paintWidth = sx;
+                paintHeight = sy;
+                return;
+            }
+
+            if (paintWeights != null && paintWeights.Length == needed && paintWidth == sx && paintHeight == sy)
                 return;
 
-            paintWeights = new int[needed];
+            var old = paintWeights;
+            var resized = new int[needed];
+            if (old != null && paintWidth > 0 && paintHeight > 0 && old.Length == paintWidth * paintHeight)
+            {
+                var copyW = math.min(paintWidth, sx);
+                var copyH = math.min(paintHeight, sy);
+                for (var y = 0; y < copyH; y++)
+                for (var x = 0; x < copyW; x++)
+                    resized[x + (y * sx)] = old[x + (y * paintWidth)];
+            }
+
+            paintWeights = resized;
+            paintWidth = sx;
+            paintHeight = sy;
         }
 
         int IUID.ID

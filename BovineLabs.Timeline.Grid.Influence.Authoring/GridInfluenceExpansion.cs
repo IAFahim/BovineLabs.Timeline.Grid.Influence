@@ -8,18 +8,23 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public static void Collect(GridInfluenceClip clip, List<InfluenceShape> into)
         {
             into.Clear();
-
-            var scale = clip.WeightMultiplier * clip.Polarity.Sign();
-            var rings = clip.Falloff == FalloffMode.Stepped ? clip.FalloffSteps : 0;
-            var spacing = clip.FalloffSpacing < 1 ? 1 : clip.FalloffSpacing;
-
-            AddExpanded(into, clip.Stamp, scale, clip.Rotation, rings, spacing);
+            CollectStamp(clip, clip.Stamp, into);
 
             if (clip.ExtraStamps == null)
                 return;
 
             foreach (var extra in clip.ExtraStamps)
-                AddExpanded(into, extra, scale, clip.Rotation, rings, spacing);
+                CollectStamp(clip, extra, into);
+        }
+
+        /// <summary> Appends a single stamp's expanded shapes (footprint, rotation, falloff rings) to <paramref name="into"/>. </summary>
+        public static void CollectStamp(GridInfluenceClip clip, GridStampSchemaObject schema, List<InfluenceShape> into)
+        {
+            var scale = clip.WeightMultiplier * clip.Polarity.Sign();
+            var rings = clip.Falloff == FalloffMode.Stepped ? clip.FalloffSteps : 0;
+            var spacing = clip.FalloffSpacing < 1 ? 1 : clip.FalloffSpacing;
+
+            AddExpanded(into, schema, scale, clip.Rotation, rings, spacing);
         }
 
         private static void AddExpanded(List<InfluenceShape> into, GridStampSchemaObject schema, float scale,
@@ -28,13 +33,23 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             if (schema == null)
                 return;
 
-            var baseShape = schema.BuildShape(scale);
+            var baseShapes = new List<InfluenceShape>(1);
+            schema.BuildShapes(scale, baseShapes);
+            if (baseShapes.Count == 0)
+                return;
 
-            for (var k = 0; k <= rings; k++)
+            // Concentric falloff rings only make sense for a single outline shape; a painted stamp is already
+            // a set of spans, so it ignores rings (insetting arbitrary cells is meaningless).
+            var ringCount = schema.Kind == ShapeKind.Painted ? 0 : rings;
+
+            foreach (var baseShape in baseShapes)
             {
-                var shape = baseShape.Inset(k * spacing).Rotated(rotation);
-                if (!Rasterizer.Bounds(shape, default).IsEmpty)
-                    into.Add(shape);
+                for (var k = 0; k <= ringCount; k++)
+                {
+                    var shape = baseShape.Inset(k * spacing).Rotated(rotation);
+                    if (!Rasterizer.Bounds(shape, default).IsEmpty)
+                        into.Add(shape);
+                }
             }
         }
     }

@@ -131,7 +131,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         public void OnUpdate(ref SystemState state)
         {
             if (!TimelineDebugUtility.TryGetDrawer<InfluenceDebugSystem>(
-                    ref state, InfluenceDebugSystemConfig.Enabled.Data, out var drawer))
+                    ref state, InfluenceDebugSystemConfig.Enabled.Data, out var drawer,
+                    out var viewer, out var hasViewer))
                 return;
 
             var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
@@ -150,6 +151,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 state.Dependency = new DrawStampsJob
                 {
                     Drawer = drawer,
+                    Viewer = viewer,
+                    HasViewer = hasViewer,
                     PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
                     NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
                     CellSize = cellSize,
@@ -173,42 +176,52 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 for (var i = 0; i < reg.Count; i++)
                 {
                     ref var pair = ref reg.Slot(i);
-                    var field = pair.Front;
-                    if (!field.IsCreated) continue;
+                    if (!pair.Front.IsCreated) continue;
 
-                    var dependency = JobHandle.CombineDependencies(state.Dependency, field.Dependency);
-
-                    dependency = new DrawGridJob
-                    {
-                        Drawer = drawer,
-                        PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
-                        NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
-                        GridColor = InfluenceDebugSystemConfig.GridColor.Data,
-                        CellSize = cellSize,
-                        Basis = basis,
-                        DrawGrid = drawGrid,
-                        DrawValues = drawValues,
-                        DrawValueText = InfluenceDebugSystemConfig.DrawValueText.Data,
-                        ValueStride = math.max(1, InfluenceDebugSystemConfig.ValueStride.Data),
-                        CameraCulling = cameraCulling,
-                        CullToCamera = cullToCamera,
-                        ActiveSlots = field.ActiveSlotsList,
-                        CoordBySlot = field.CoordBySlotList,
-                        Data = field.DataList,
-                        Spec = field.Spec
-                    }.Schedule(dependency);
-
-                    field.PublishDependency(dependency);
-                    pair.Front = field;
-                    state.Dependency = dependency;
+                    state.Dependency = ScheduleDrawGrid(ref pair.Front, state.Dependency, drawer, cellSize, basis,
+                        cameraCulling, cullToCamera, drawGrid, drawValues, viewer, hasViewer);
                 }
             }
+        }
+
+        private static JobHandle ScheduleDrawGrid(ref InfluenceField field, JobHandle inputDeps, Drawer drawer,
+            float cellSize, GridBasis basis, CameraCulling cameraCulling, bool cullToCamera, bool drawGrid,
+            bool drawValues, float3 viewer, bool hasViewer)
+        {
+            var dependency = JobHandle.CombineDependencies(inputDeps, field.Dependency);
+
+            dependency = new DrawGridJob
+            {
+                Drawer = drawer,
+                PositiveColor = InfluenceDebugSystemConfig.PositiveColor.Data,
+                NegativeColor = InfluenceDebugSystemConfig.NegativeColor.Data,
+                GridColor = InfluenceDebugSystemConfig.GridColor.Data,
+                CellSize = cellSize,
+                Basis = basis,
+                DrawGrid = drawGrid,
+                DrawValues = drawValues,
+                DrawValueText = InfluenceDebugSystemConfig.DrawValueText.Data,
+                Viewer = viewer,
+                HasViewer = hasViewer,
+                ValueStride = math.max(1, InfluenceDebugSystemConfig.ValueStride.Data),
+                CameraCulling = cameraCulling,
+                CullToCamera = cullToCamera,
+                ActiveSlots = field.ActiveSlotsList,
+                CoordBySlot = field.CoordBySlotList,
+                Data = field.DataList,
+                Spec = field.Spec
+            }.Schedule(dependency);
+
+            field.PublishDependency(dependency);
+            return dependency;
         }
 
         [BurstCompile]
         private partial struct DrawStampsJob : IJobEntity
         {
             public Drawer Drawer;
+            public float3 Viewer;
+            public bool HasViewer;
             public Color PositiveColor;
             public Color NegativeColor;
             public float CellSize;
@@ -298,45 +311,30 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     gridOrigin.y * CellSize + CellSize * 0.5f);
 
                 var snappedWorld = Basis.ToWorldSpace(snappedGrid, heightOffset);
+                var tier = TimelineDebugTier.Resolve(snappedWorld, Viewer, HasViewer);
 
-                switch (shape.Kind)
+                DrawShapeOutline(shape, snappedWorld, color, heightOffset);
+
+                // Far: just the stamp shape outline (drawn above) is the coarse summary. No center point or text.
+                if (tier >= DebugTier.Mid)
                 {
-                    case ShapeKind.SolidRect:
-                        DrawRect(snappedWorld, shape.RectMin, shape.RectSize, color, heightOffset);
-                        break;
-                    case ShapeKind.RectShell:
-                        DrawRect(snappedWorld, shape.ShellMin, shape.ShellSize, color, heightOffset);
-                        DrawRect(snappedWorld,
-                            shape.ShellMin + new int2(shape.ShellThickness, shape.ShellThickness),
-                            shape.ShellSize - new int2(shape.ShellThickness * 2, shape.ShellThickness * 2),
-                            color, heightOffset);
-                        break;
-                    case ShapeKind.Disc:
-                        DrawDisc(snappedWorld, shape.DiscCenter, shape.DiscRadius, color, heightOffset);
-                        break;
-                    case ShapeKind.Annulus:
-                        DrawDisc(snappedWorld, shape.AnnulusCenter, shape.AnnulusOuterRadius, color, heightOffset);
-                        if (shape.AnnulusInnerRadius >= 0)
-                            DrawDisc(snappedWorld, shape.AnnulusCenter, shape.AnnulusInnerRadius, color, heightOffset);
-                        break;
-                    case ShapeKind.Capsule:
-                        DrawCapsule(snappedWorld, shape.CapsuleStart, shape.CapsuleEnd, shape.CapsuleRadius, color,
-                            heightOffset);
-                        break;
-
-                    case ShapeKind.Sector:
-                        DrawDisc(snappedWorld, shape.SectorCenter, shape.SectorRadius, color, heightOffset);
-                        break;
+                    // Mid: mark the stamp origin + one short label.
+                    Drawer.Point(snappedWorld, 0.1f * CellSize, color);
+                    if (DrawStampLabels || tier == DebugTier.Close)
+                        Drawer.Text32(snappedWorld + Basis.Normal * 0.3f, "Stamp", color, 10f);
                 }
 
-                Drawer.Point(snappedWorld, 0.1f * CellSize, color);
-
-                if (DrawStampLabels)
+                if (tier == DebugTier.Close)
                 {
-                    FixedString32Bytes label = default;
-                    label.Append((FixedString32Bytes)"Wt: ");
-                    label.Append(shape.Weight);
-                    Drawer.Text32(snappedWorld + Basis.Normal * 0.3f, label, color, 10f);
+                    // Close: every number — weight + cell origin coords.
+                    var readout = new FixedString128Bytes();
+                    readout.Append((FixedString32Bytes)"wt ");
+                    readout.Append(shape.Weight);
+                    readout.Append((FixedString32Bytes)"  cell ");
+                    readout.Append(gridOrigin.x);
+                    readout.Append((FixedString32Bytes)",");
+                    readout.Append(gridOrigin.y);
+                    Drawer.Text128(snappedWorld + Basis.Normal * 0.55f, readout, TimelineDebugColors.Label, 9f);
                 }
             }
 
@@ -420,6 +418,38 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 }
             }
 
+            private void DrawShapeOutline(in InfluenceShape shape, float3 localOrigin, Color color, float heightOffset)
+            {
+                switch (shape.Kind)
+                {
+                    case ShapeKind.SolidRect:
+                    case ShapeKind.RoundedRect:
+                        DrawRect(localOrigin, shape.RectMin, shape.RectSize, color, heightOffset);
+                        break;
+                    case ShapeKind.RectShell:
+                        DrawRect(localOrigin, shape.ShellMin, shape.ShellSize, color, heightOffset);
+                        break;
+                    case ShapeKind.Disc:
+                        DrawDisc(localOrigin, shape.DiscCenter, shape.DiscRadius, color, heightOffset);
+                        break;
+                    case ShapeKind.Annulus:
+                        DrawDisc(localOrigin, shape.AnnulusCenter, shape.AnnulusOuterRadius, color, heightOffset);
+                        DrawDisc(localOrigin, shape.AnnulusCenter, shape.AnnulusInnerRadius, color, heightOffset);
+                        break;
+                    case ShapeKind.Ellipse:
+                        DrawDisc(localOrigin, shape.EllipseCenter, math.cmax(shape.EllipseRadii), color, heightOffset);
+                        break;
+                    case ShapeKind.Capsule:
+                    case ShapeKind.ThickLine:
+                        DrawCapsule(localOrigin, shape.CapsuleStart, shape.CapsuleEnd, shape.CapsuleRadius, color,
+                            heightOffset);
+                        break;
+                    case ShapeKind.Sector:
+                        DrawDisc(localOrigin, shape.SectorCenter, shape.SectorRadius, color, heightOffset);
+                        break;
+                }
+            }
+
             private void DrawRect(float3 localOrigin, int2 min, int2 size, Color color, float heightOffset)
             {
                 if (size.x <= 0 || size.y <= 0) return;
@@ -482,6 +512,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             public bool DrawGrid;
             public bool DrawValues;
             public bool DrawValueText;
+            public float3 Viewer;
+            public bool HasViewer;
             public int ValueStride;
             public CameraCulling CameraCulling;
             public bool CullToCamera;
@@ -512,41 +544,59 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     var baseIndex = slot * elements;
                     var chunkOrigin = new float2(coord.x * chunkSize, coord.y * chunkSize) * CellSize;
 
+                    // Far (always when enabled): chunk bounds are the coarse field outline.
                     if (DrawGrid) DrawChunkBounds(chunkOrigin, chunkSize);
 
                     if (!DrawValues) continue;
 
+                    // Mid: one short label per visible chunk, above the per-cell fills.
+                    var chunkCenterWorld = Basis.ToWorldSpace(
+                        chunkOrigin + new float2(chunkSize * CellSize * 0.5f), RenderHeight);
+                    if (TimelineDebugTier.Resolve(chunkCenterWorld, Viewer, HasViewer) >= DebugTier.Mid)
+                        Drawer.Text32(chunkCenterWorld + Basis.Normal * 0.5f, "Influence", GridColor, 11f);
+
                     for (var y = 0; y < chunkSize; y += step)
                     for (var x = 0; x < chunkSize; x += step)
-                    {
-                        var value = Data[baseIndex + y * stride + x];
-                        if (value == 0) continue;
-
-                        var cellGrid = chunkOrigin + new float2(x * CellSize, y * CellSize);
-                        var baseColor = value > 0 ? PositiveColor : NegativeColor;
-
-                        var fill = baseColor;
-                        fill.a *= math.clamp(math.abs(value) / 10f, 0.15f, 0.75f);
-
-                        var pad = CellSize * 0.05f;
-                        var c0 = Basis.ToWorldSpace(cellGrid + new float2(pad, pad), RenderHeight);
-                        var c1 = Basis.ToWorldSpace(cellGrid + new float2(CellSize - pad, pad), RenderHeight);
-                        var c2 = Basis.ToWorldSpace(cellGrid + new float2(CellSize - pad, CellSize - pad),
-                            RenderHeight);
-                        var c3 = Basis.ToWorldSpace(cellGrid + new float2(pad, CellSize - pad), RenderHeight);
-
-                        Drawer.Quad(c0, c1, c2, c3, fill);
-
-                        if (!DrawValueText)
-                            continue;
-
-                        FixedString32Bytes text = default;
-                        text.Append(value);
-                        Drawer.Text32(
-                            Basis.ToWorldSpace(cellGrid + new float2(CellSize * 0.5f), RenderHeight),
-                            text, baseColor, 12f);
-                    }
+                        DrawCell(Data[baseIndex + y * stride + x], chunkOrigin + new float2(x * CellSize, y * CellSize));
                 }
+            }
+
+            private void DrawCell(int value, float2 cellGrid)
+            {
+                if (value == 0) return;
+
+                var cellCenterWorld = Basis.ToWorldSpace(cellGrid + new float2(CellSize * 0.5f), RenderHeight);
+                var tier = TimelineDebugTier.Resolve(cellCenterWorld, Viewer, HasViewer);
+
+                // Far: the chunk bounds (drawn above) are the coarse summary; skip per-cell fills entirely.
+                if (tier == DebugTier.Far)
+                    return;
+
+                var baseColor = value > 0 ? PositiveColor : NegativeColor;
+
+                var fill = baseColor;
+                fill.a *= math.clamp(math.abs(value) / 10f, 0.15f, 0.75f);
+
+                var pad = CellSize * 0.05f;
+                var c0 = Basis.ToWorldSpace(cellGrid + new float2(pad, pad), RenderHeight);
+                var c1 = Basis.ToWorldSpace(cellGrid + new float2(CellSize - pad, pad), RenderHeight);
+                var c2 = Basis.ToWorldSpace(cellGrid + new float2(CellSize - pad, CellSize - pad),
+                    RenderHeight);
+                var c3 = Basis.ToWorldSpace(cellGrid + new float2(pad, CellSize - pad), RenderHeight);
+
+                // Mid: the gradient cell fills + one short label once per chunk.
+                Drawer.Quad(c0, c1, c2, c3, fill);
+
+                // Close: every cell's value as text. DrawValueText stays as an extra opt-in.
+                if (tier != DebugTier.Close)
+                    return;
+
+                if (!DrawValueText)
+                    return;
+
+                FixedString32Bytes text = default;
+                text.Append(value);
+                Drawer.Text32(cellCenterWorld, text, baseColor, 12f);
             }
 
             private bool IsChunkVisible(int2 coord)

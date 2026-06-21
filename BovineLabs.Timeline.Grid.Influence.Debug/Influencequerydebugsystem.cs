@@ -6,6 +6,7 @@ using BovineLabs.Timeline.Core.Debug;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using BovineLabs.Timeline.Grid.Influence.Data.Flows;
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -55,7 +56,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         public void OnUpdate(ref SystemState state)
         {
             if (!TimelineDebugUtility.TryGetDrawer<InfluenceQueryDebugSystem>(
-                    ref state, InfluenceQueryDebugConfig.Enabled.Data, out var drawer))
+                    ref state, InfluenceQueryDebugConfig.Enabled.Data, out var drawer,
+                    out var viewer, out var hasViewer))
                 return;
 
             var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
@@ -63,6 +65,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             state.Dependency = new DrawQueryJob
             {
                 Drawer = drawer,
+                Viewer = viewer,
+                HasViewer = hasViewer,
                 Basis = new GridBasis(settings.PlaneNormal),
                 CellSize = math.max(0.0001f, settings.CellSize),
                 CellColor = InfluenceQueryDebugConfig.CellColor.Data,
@@ -74,6 +78,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
         private partial struct DrawQueryJob : IJobEntity
         {
             public Drawer Drawer;
+            public float3 Viewer;
+            public bool HasViewer;
             public GridBasis Basis;
             public float CellSize;
             public Color CellColor;
@@ -89,21 +95,55 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 var min = new float2(result.Cell.x, result.Cell.y) * CellSize;
                 var max = min + new float2(CellSize, CellSize);
 
-                var c00 = Basis.ToWorldSpace(min, renderHeight);
-                var c10 = Basis.ToWorldSpace(new float2(max.x, min.y), renderHeight);
-                var c11 = Basis.ToWorldSpace(max, renderHeight);
-                var c01 = Basis.ToWorldSpace(new float2(min.x, max.y), renderHeight);
-
-                Drawer.Line(c00, c10, CellColor);
-                Drawer.Line(c10, c11, CellColor);
-                Drawer.Line(c11, c01, CellColor);
-                Drawer.Line(c01, c00, CellColor);
+                var center = (min + max) * 0.5f;
+                var centerWorld = Basis.ToWorldSpace(center, renderHeight);
+                var tier = TimelineDebugTier.Resolve(centerWorld, Viewer, HasViewer);
 
                 var direction = FieldGradient.Normalized(result.Direction);
-                if (math.lengthsq(direction) < 1e-6f)
-                    return;
+                var hasDirection = math.lengthsq(direction) >= 1e-6f;
 
-                DrawArrow((min + max) * 0.5f, direction, renderHeight);
+                // Far: the single shape that says what the query did — the steering arrow
+                // (or the cell point if the gradient is flat). No cell outline, no text.
+                if (hasDirection)
+                {
+                    DrawArrow(center, direction, renderHeight);
+                }
+                else
+                {
+                    Drawer.Point(centerWorld, 0.12f * CellSize, ArrowColor);
+                }
+
+                if (tier >= DebugTier.Mid)
+                {
+                    // Mid: the sampled cell outline + one short label.
+                    var c00 = Basis.ToWorldSpace(min, renderHeight);
+                    var c10 = Basis.ToWorldSpace(new float2(max.x, min.y), renderHeight);
+                    var c11 = Basis.ToWorldSpace(max, renderHeight);
+                    var c01 = Basis.ToWorldSpace(new float2(min.x, max.y), renderHeight);
+
+                    Drawer.Line(c00, c10, CellColor);
+                    Drawer.Line(c10, c11, CellColor);
+                    Drawer.Line(c11, c01, CellColor);
+                    Drawer.Line(c01, c00, CellColor);
+
+                    Drawer.Text32(centerWorld + Basis.Normal * 0.3f, "Influence Query", CellColor, 12f);
+                }
+
+                if (tier == DebugTier.Close)
+                {
+                    // Close: every number — sampled value, gradient magnitude, cell coords.
+                    var magnitude = math.length(new float2(result.Direction.x, result.Direction.y));
+                    var readout = new FixedString128Bytes();
+                    readout.Append((FixedString32Bytes)"val ");
+                    readout.Append(result.Value);
+                    readout.Append((FixedString32Bytes)"  grad ");
+                    readout.Append(magnitude);
+                    readout.Append((FixedString32Bytes)"  cell ");
+                    readout.Append(result.Cell.x);
+                    readout.Append((FixedString32Bytes)",");
+                    readout.Append(result.Cell.y);
+                    Drawer.Text128(centerWorld + Basis.Normal * 0.6f, readout, TimelineDebugColors.Label, 11f);
+                }
             }
 
             private void DrawArrow(float2 center, float2 direction, float height)

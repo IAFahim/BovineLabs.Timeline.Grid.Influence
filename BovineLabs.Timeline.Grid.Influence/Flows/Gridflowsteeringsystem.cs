@@ -51,7 +51,6 @@ namespace BovineLabs.Timeline.Grid.Influence
 
                 var combined = JobHandle.CombineDependencies(dependency, field.Dependency, pair.WriterDependency);
 
-                // Bake the vector field once per frame; every steering agent on this field samples it.
                 var handle = flow.Resolve(ref field, combined);
 
                 handle = new SteerJob

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using BovineLabs.Core.Editor.Inspectors;
 using BovineLabs.Timeline.Grid.Influence.Authoring;
@@ -102,8 +103,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                     : Color.Lerp(new Color(0.1f, 0.14f, 0.2f), new Color(0.3f, 0.6f, 1f), intensity);
         }
 
-        // ponytail: IMGUI drag-paint inside the existing preview container. Same designer outcome as Mosaic's
-        // UI-Toolkit PointerManipulator; upgrade to a manipulator + per-cell VisualElements if you want hover FX.
         private void DrawPaintCanvas(GridStampSchemaObject stamp)
         {
             EditorGUILayout.Space();
@@ -137,7 +136,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             if (GUILayout.Button("Clear Canvas", GUILayout.Width(110)))
             {
                 Undo.RecordObject(stamp, "Clear Stamp Canvas");
-                System.Array.Clear(weights, 0, weights.Length);
+                Array.Clear(weights, 0, weights.Length);
                 EditorUtility.SetDirty(stamp);
             }
         }
@@ -175,8 +174,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
 
             var local = e.mousePosition - rect.position;
             var cx = (int)(local.x / cellPixels);
-            // Array row 0 is drawn at the top (SetPixel(x, sy-1-y)), and screen Y grows downward, so the
-            // array row index matches local.y directly — no inversion (matches the footprint preview).
+
             var cy = (int)(local.y / cellPixels);
             if (cx < 0 || cx >= sx || cy < 0 || cy >= sy)
                 return;
@@ -202,7 +200,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             var kind = (ShapeKind)serializedObject.FindProperty(nameof(GridStampSchemaObject.Kind)).intValue;
             var painted = kind == ShapeKind.Painted;
 
-            // BaseWeight is per-shape; painted cells carry their own weight via the brush.
             SetVisible(nameof(GridStampSchemaObject.BaseWeight), !painted);
             SetVisible(nameof(GridStampSchemaObject.PaintMin), painted);
             SetVisible(nameof(GridStampSchemaObject.PaintSize), painted);

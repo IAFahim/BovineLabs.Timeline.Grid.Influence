@@ -17,8 +17,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         Sector,
 
-        // Freeform painted cells. Never lives in an InfluenceShape (those carry parametric kinds);
-        // the schema expands a Painted stamp into run-length SolidRect spans. See GridStampSchemaObject.BuildShapes.
         Painted
     }
 

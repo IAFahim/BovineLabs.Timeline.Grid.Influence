@@ -9,8 +9,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 {
     public unsafe class ReaderApiTests
     {
-        // SampleBilinear at a cell centre (cell + 0.5) must equal the sharp ReadCell of that cell — the
-        // smooth read degenerates to the integer read on grid points.
         [Test]
         public void SampleBilinearAtCellCentreMatchesReadCell()
         {
@@ -34,7 +32,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             field.Dispose();
         }
 
-        // Halfway between a filled (9) and an empty (0) cell, the smooth read is the average.
         [Test]
         public void SampleBilinearInterpolatesBetweenCells()
         {
@@ -48,14 +45,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             var reader = field.AsReader();
             Assert.AreEqual(9, reader.ReadCell(new int2(2, 1)));
             Assert.AreEqual(0, reader.ReadCell(new int2(3, 1)));
-            // Midpoint between cell (2,1)=9 and (3,1)=0, no y interpolation.
+
             Assert.AreEqual(4.5f, reader.SampleBilinear(new float2(3.0f, 1.5f)), 1e-4f);
 
             stamps.Dispose();
             field.Dispose();
         }
 
-        // ChunkView reads must agree with ReadCell across an active chunk (the editor snapshot relies on this).
         [Test]
         public void ChunkViewMatchesReadCell()
         {
@@ -90,7 +86,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             field.Dispose();
         }
 
-        // Composite bounds are the union of the layer bounds; emitted span count is positive and within estimate.
         [Test]
         public void CompositeReaderBoundsAndEmit()
         {

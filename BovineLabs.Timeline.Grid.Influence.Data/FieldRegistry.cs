@@ -50,8 +50,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             if (!Pairs.IsCreated || Count >= Pairs.Length) return FieldId.Invalid;
 
-            // Guard before allocating: a duplicate Key would make KeyToSlot.Add throw after we've
-            // already created persistent InfluenceFields, leaking them. Reject without advancing Count.
             if (KeyToSlot.ContainsKey(config.Key)) return FieldId.Invalid;
 
             var i = Count++;
@@ -99,8 +97,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public InfluenceField Back;
         public bool DoubleBuffered;
 
-        // Derived gradient cache, baked once per frame by GridFlowSteeringSystem and shared by every
-        // steering agent on this field. Lazily created the first frame the field is steered.
         public FlowField Flow;
 
         public InfluenceField.StencilConfig PendingStencil;

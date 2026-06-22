@@ -73,10 +73,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 return false;
             }
 
-            // Complete the writer side for every field before reading any of their
-            // NativeLists. CaptureFieldSummaries reads Length/ActiveSlotCount/FrameId for
-            // ALL fields, but FieldTickSystem may still have in-flight jobs resizing those
-            // lists. Completing only the selected slot (below) is not enough.
             for (var i = 0; i < registry.Count; i++)
             {
                 ref var slotPair = ref registry.Slot(i);
@@ -90,7 +86,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
 
             ref var pair = ref registry.Slot(selectedFieldSlot);
 
-            // Make snapshotting deterministic and editor-safe.
             pair.WriterDependency.Complete();
             pair.Front.Complete();
 

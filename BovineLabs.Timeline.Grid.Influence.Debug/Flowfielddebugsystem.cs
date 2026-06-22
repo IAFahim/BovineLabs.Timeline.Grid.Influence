@@ -65,7 +65,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             var basis = new GridBasis(settings.PlaneNormal);
             var cameraCulling = SystemAPI.GetSingleton<DrawSystem.Singleton>().CameraCulling;
 
-            // If Quill hasn't populated camera data yet, skip to avoid drawing the whole world.
             if (cameraCulling.IsDefault)
                 return;
 
@@ -132,7 +131,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 {
                     var coord = CoordBySlot[ActiveSlots[s]];
 
-                    // Cull entire chunks outside the camera frustum before reading cells or drawing arrows.
                     if (!IsChunkVisible(coord))
                         continue;
 
@@ -142,8 +140,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     var chunkCenterWorld = Basis.ToWorldSpace(chunkCenterGrid, RenderHeight);
                     var tier = TimelineDebugTier.Resolve(chunkCenterWorld, Viewer, HasViewer);
 
-                    // Far: a coarse summary — the chunk outline + one averaged flow arrow for the whole chunk.
-                    // No per-cell arrows or text, so a top-down view of a big field stays readable.
                     if (tier == DebugTier.Far)
                     {
                         DrawChunkBounds(chunkOrigin, edge);
@@ -165,7 +161,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                         continue;
                     }
 
-                    // Mid: one short label per chunk above the per-cell arrows.
                     if (tier == DebugTier.Mid)
                         Drawer.Text32(chunkCenterWorld + Basis.Normal * 0.4f, "Flow", FlowColor, 11f);
 
@@ -186,7 +181,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
                         if (tier == DebugTier.Close)
                         {
-                            // Close: every cell's gradient magnitude + coords as text.
                             var cellCenter = (new float2(cell.x, cell.y) + 0.5f) * CellSize;
                             var cellWorld = Basis.ToWorldSpace(cellCenter, RenderHeight);
                             var readout = new FixedString128Bytes();

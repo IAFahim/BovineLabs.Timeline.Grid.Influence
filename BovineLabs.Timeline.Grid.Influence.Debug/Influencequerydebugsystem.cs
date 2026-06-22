@@ -102,20 +102,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 var direction = FieldGradient.Normalized(result.Direction);
                 var hasDirection = math.lengthsq(direction) >= 1e-6f;
 
-                // Far: the single shape that says what the query did — the steering arrow
-                // (or the cell point if the gradient is flat). No cell outline, no text.
                 if (hasDirection)
-                {
                     DrawArrow(center, direction, renderHeight);
-                }
                 else
-                {
                     Drawer.Point(centerWorld, 0.12f * CellSize, ArrowColor);
-                }
 
                 if (tier >= DebugTier.Mid)
                 {
-                    // Mid: the sampled cell outline + one short label.
                     var c00 = Basis.ToWorldSpace(min, renderHeight);
                     var c10 = Basis.ToWorldSpace(new float2(max.x, min.y), renderHeight);
                     var c11 = Basis.ToWorldSpace(max, renderHeight);
@@ -131,7 +124,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
                 if (tier == DebugTier.Close)
                 {
-                    // Close: every number — sampled value, gradient magnitude, cell coords.
                     var magnitude = math.length(new float2(result.Direction.x, result.Direction.y));
                     var readout = new FixedString128Bytes();
                     readout.Append((FixedString32Bytes)"val ");

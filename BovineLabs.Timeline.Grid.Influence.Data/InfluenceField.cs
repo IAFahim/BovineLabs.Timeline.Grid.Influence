@@ -460,7 +460,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 var source = (int*)StencilData.GetUnsafeReadOnlyPtr() + slot * Spec.ElementsPerChunk +
                              sourceY * Spec.Stride;
                 for (var x = 0; x < Spec.ChunkSize; x++)
-                    halo[haloY * haloStride + (x + 1)] =
+                    halo[haloY * haloStride + x + 1] =
                         IntegerMath.Outflow(source[x], DecayPerMille, SpreadDenominator);
             }
         }

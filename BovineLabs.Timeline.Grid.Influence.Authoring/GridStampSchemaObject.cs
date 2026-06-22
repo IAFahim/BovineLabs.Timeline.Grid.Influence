@@ -74,7 +74,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
         public ushort Id => (ushort)id;
 
-        /// <summary> Row-major painted weights, length PaintSize.x * PaintSize.y. Painted via the custom inspector canvas. </summary>
         public int[] PaintWeights => paintWeights;
 
         private void OnValidate()
@@ -95,7 +94,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             EnsurePaintBuffer();
         }
 
-        /// <summary> Ensures the paint buffer matches PaintSize, preserving the overlapping painted region on resize. </summary>
+        int IUID.ID
+        {
+            get => id;
+            set => id = value;
+        }
+
         public void EnsurePaintBuffer()
         {
             var sx = math.clamp(PaintSize.x, 1, 64);
@@ -104,8 +108,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
             var needed = sx * sy;
 
-            // Migrate assets saved before paintWidth/paintHeight existed: if the buffer already matches PaintSize,
-            // adopt those dims rather than treating the data as size-0 and wiping it.
             if ((paintWidth == 0 || paintHeight == 0) && paintWeights != null && paintWeights.Length == needed)
             {
                 paintWidth = sx;
@@ -124,7 +126,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 var copyH = math.min(paintHeight, sy);
                 for (var y = 0; y < copyH; y++)
                 for (var x = 0; x < copyW; x++)
-                    resized[x + (y * sx)] = old[x + (y * paintWidth)];
+                    resized[x + y * sx] = old[x + y * paintWidth];
             }
 
             paintWeights = resized;
@@ -132,17 +134,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             paintHeight = sy;
         }
 
-        int IUID.ID
-        {
-            get => id;
-            set => id = value;
-        }
-
-        /// <summary>
-        /// Expands this stamp into one or more shapes. Parametric kinds yield a single shape; the Painted
-        /// kind yields run-length-encoded SolidRect spans of the painted cells (so it rides the existing
-        /// multi-shape stamp pipeline and rotates per span).
-        /// </summary>
         public void BuildShapes(float weightMultiplier, List<InfluenceShape> into)
         {
             if (Kind == ShapeKind.Painted)
@@ -167,7 +158,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 var x = 0;
                 while (x < sx)
                 {
-                    var raw = paintWeights[x + (y * sx)];
+                    var raw = paintWeights[x + y * sx];
                     if (raw == 0)
                     {
                         x++;
@@ -176,7 +167,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
                     var runStart = x;
                     x++;
-                    while (x < sx && paintWeights[x + (y * sx)] == raw)
+                    while (x < sx && paintWeights[x + y * sx] == raw)
                         x++;
 
                     var weight = (int)math.round(raw * weightMultiplier);
@@ -220,7 +211,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 ShapeKind.Sector => InfluenceShape.Sector(sectorCenter, SectorRadius,
                     Ray(SectorFacingDegrees - SectorHalfAngleDegrees),
                     Ray(SectorFacingDegrees + SectorHalfAngleDegrees), weight),
-                // Painted has no single-shape form; this bounding rect is only a fallback for the composite-base path.
+
                 ShapeKind.Painted => InfluenceShape.SolidRect(
                     new int2(PaintMin.x, PaintMin.y),
                     new int2(math.max(0, PaintSize.x), math.max(0, PaintSize.y)), weight),

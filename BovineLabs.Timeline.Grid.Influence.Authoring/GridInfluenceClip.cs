@@ -35,7 +35,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public int FalloffSpacing = 2;
 
         [Header("Transform")]
-        [Tooltip("Scales stamp weights. On composite clips it scales the per-depth CUMULATIVE weights (rounded per layer), so inter-layer deltas can differ slightly from the single-stamp path.")]
+        [Tooltip(
+            "Scales stamp weights. On composite clips it scales the per-depth CUMULATIVE weights (rounded per layer), so inter-layer deltas can differ slightly from the single-stamp path.")]
         public float WeightMultiplier = 1.0f;
 
         public Vector3 LocalOffset;
@@ -45,7 +46,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public EntityLinkSchema originLink;
 
         [Header("Display")]
-        [Tooltip("Editor-only: tints the clip and gizmo for visual grouping. Has no effect on runtime field routing, which is determined solely by the assigned Field schema.")]
+        [Tooltip(
+            "Editor-only: tints the clip and gizmo for visual grouping. Has no effect on runtime field routing, which is determined solely by the assigned Field schema.")]
         public GridFieldCategory Category = GridFieldCategory.Generic;
 
         public override double duration => 1.0;
@@ -73,10 +75,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
             var hasComposite = compositeBlob.IsCreated;
 
-            // A Composite supplies the primary footprint and supersedes the (mandatory) Stamp entirely, so only
-            // expand the primary stamp when there is no composite. The runtime consumes builder.Shape only on the
-            // no-composite path; everything in the buffer always stacks. Keeping primary and extras separate stops
-            // a multi-span primary (painted/ringed) from leaking its tail spans into the buffer under a composite.
             var primaryShapes = new List<InfluenceShape>(1);
             if (!hasComposite)
                 GridInfluenceExpansion.CollectStamp(this, Stamp, primaryShapes);
@@ -114,21 +112,17 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         {
             blob = default;
 
-            // The composite system erodes/insets a single parametric shape; a painted base has no single-shape
-            // form (BuildShape returns only its bounding rect), so it would silently bake as a solid block.
             if (Composite.Base.Kind == ShapeKind.Painted)
             {
                 Debug.LogWarning($"GridInfluenceClip '{name}' uses a Painted stamp as its Composite base. " +
-                    "Painted stamps have no composite form; the composite is skipped. Use a parametric base shape.", this);
+                                 "Painted stamps have no composite form; the composite is skipped. Use a parametric base shape.",
+                    this);
                 return false;
             }
 
             var baseShape = Composite.Base.BuildShape(1f).WithWeight(1);
             var weights = Composite.Profile.SampleDepthWeights(baseShape, Allocator.Temp);
 
-            // Apply WeightMultiplier to the composite layers too, matching the stamp path
-            // (GridInfluenceExpansion scales by WeightMultiplier * Polarity.Sign()); otherwise a
-            // WeightMultiplier set on a composite clip is silently ignored.
             var sign = Polarity.Sign();
             var anyNonZero = false;
             for (var i = 0; i < weights.Length; i++)
@@ -138,15 +132,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             }
 
             if (!anyNonZero && weights.Length > 0)
-                Debug.LogWarning($"GridInfluenceClip '{name}' WeightMultiplier ({WeightMultiplier}) rounded every composite layer weight to 0; the composite contributes nothing. Raise WeightMultiplier or the base weights.", this);
+                Debug.LogWarning(
+                    $"GridInfluenceClip '{name}' WeightMultiplier ({WeightMultiplier}) rounded every composite layer weight to 0; the composite contributes nothing. Raise WeightMultiplier or the base weights.",
+                    this);
 
             blob = CompositeBaker.Build(baseShape, weights, Allocator.Persistent);
             weights.Dispose();
 
-            // CompositeBaker.Build always returns an IsCreated Persistent blob, even with 0 layers. If the composite
-            // contributes nothing (every layer weight rounded to 0, or every inset rasterized to empty bounds), the
-            // caller would overwrite this reference without disposing it, leaking the Persistent allocation. The baker
-            // only takes ownership via AddBlobAsset on the true path, so dispose here before reporting failure.
             if (!(blob.IsCreated && blob.Value.Layers.Length > 0))
             {
                 if (blob.IsCreated)

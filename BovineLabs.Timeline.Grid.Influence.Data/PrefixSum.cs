@@ -35,7 +35,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         private static void HorizontalPassAvx2(int* field, int stride, int dimension)
         {
-            // Burst needs the IsSupported check in the same method as the intrinsics (call-site guard doesn't propagate).
             if (!Avx2.IsAvx2Supported)
                 return;
 
@@ -72,7 +71,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         private static void VerticalPassAvx2(int* field, int stride, int dimension)
         {
-            // Burst needs the IsSupported check in the same method as the intrinsics (call-site guard doesn't propagate).
             if (!Avx2.IsAvx2Supported)
                 return;
 
@@ -91,7 +89,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         private static void VerticalPassNeon(int* field, int stride, int dimension)
         {
-            // Burst needs the IsSupported check in the same method as the intrinsics (call-site guard doesn't propagate).
             if (!Neon.IsNeonSupported)
                 return;
 

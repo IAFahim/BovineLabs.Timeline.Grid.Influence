@@ -112,8 +112,6 @@ namespace BovineLabs.Timeline.Grid.Influence
                 result.Value = reader.ReadCell(cell);
                 result.Direction = FieldGradient.Ascent(reader, cell);
 
-                // Smooth read at the continuous grid position; gradient is a central difference of the
-                // bilinear samples (same 2-cell stencil as the integer Ascent, but interpolated).
                 var cellSpace = new float2(projected.x / CellSize, projected.y / CellSize);
                 result.ValueSmooth = reader.SampleBilinear(cellSpace);
                 result.DirectionSmooth = new float2(

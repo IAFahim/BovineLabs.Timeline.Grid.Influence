@@ -61,8 +61,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data.Flows
                 source.FrameId);
         }
 
-        // Job-safe reader: backing arrays resolve at job execution, so this is valid to capture into a
-        // job scheduled after Resolve without a main-thread Complete.
         internal FlowReader AsDeferredReader(ref InfluenceField source)
         {
             ThrowIfNotCreated();
@@ -74,8 +72,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data.Flows
                 source.FrameId);
         }
 
-        // Register a downstream reader (e.g. a steering job) so next frame's Resolve waits for it before
-        // resizing/overwriting the direction cache.
         internal void PublishDependency(JobHandle handle)
         {
             _dependency = JobHandle.CombineDependencies(_dependency, handle);

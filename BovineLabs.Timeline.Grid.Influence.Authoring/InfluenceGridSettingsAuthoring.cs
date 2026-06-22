@@ -18,7 +18,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public Vector3 PlaneNormal = Vector3.up;
 
         [Min(8)]
-        [Tooltip("Row stride alignment (elements) for each field's grid. Floored at 8 and rounded up to the next power of two, so values below 8 are promoted to 8.")]
+        [Tooltip(
+            "Row stride alignment (elements) for each field's grid. Floored at 8 and rounded up to the next power of two, so values below 8 are promoted to 8.")]
         public int StrideAlignment = 8;
 
         public GridFieldSchemaObject[] Fields = Array.Empty<GridFieldSchemaObject>();

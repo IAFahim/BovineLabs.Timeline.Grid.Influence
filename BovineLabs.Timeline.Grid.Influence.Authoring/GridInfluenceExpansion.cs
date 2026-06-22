@@ -17,7 +17,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 CollectStamp(clip, extra, into);
         }
 
-        /// <summary> Appends a single stamp's expanded shapes (footprint, rotation, falloff rings) to <paramref name="into"/>. </summary>
         public static void CollectStamp(GridInfluenceClip clip, GridStampSchemaObject schema, List<InfluenceShape> into)
         {
             var scale = clip.WeightMultiplier * clip.Polarity.Sign();
@@ -38,19 +37,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             if (baseShapes.Count == 0)
                 return;
 
-            // Concentric falloff rings only make sense for a single outline shape; a painted stamp is already
-            // a set of spans, so it ignores rings (insetting arbitrary cells is meaningless).
             var ringCount = schema.Kind == ShapeKind.Painted ? 0 : rings;
 
             foreach (var baseShape in baseShapes)
-            {
                 for (var k = 0; k <= ringCount; k++)
                 {
                     var shape = baseShape.Inset(k * spacing).Rotated(rotation);
                     if (!Rasterizer.Bounds(shape, default).IsEmpty)
                         into.Add(shape);
                 }
-            }
         }
     }
 }

@@ -142,8 +142,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             var cullToCamera = InfluenceDebugSystemConfig.CullToCamera.Data;
             var cameraCulling = SystemAPI.GetSingleton<DrawSystem.Singleton>().CameraCulling;
 
-            // CameraCulling.AnyIntersect(default) returns false.
-            // If Quill hasn't populated camera data yet, skip to avoid drawing the whole world.
             if (cullToCamera && cameraCulling.IsDefault)
                 return;
 
@@ -266,18 +264,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     (int)math.floor(projected.x / CellSize),
                     (int)math.floor(projected.y / CellSize));
 
-                // Draw stamps on the same debug plane as the grid, not at entity height.
                 var heightOffset = RenderHeight;
 
-                // Mirror GridInfluenceApplySystem exactly: composite layers XOR the primary shape
-                // (if/else, never both), then always the ExtraStamps elements.
                 if (clip.Composite.IsCreated)
                 {
                     ref var composite = ref clip.Composite.Value;
 
-                    // Cull the whole multi-layer composite at once before touching individual layers.
                     var bounds = CompositeShapeReader.Bounds(ref composite, int2.zero);
-                    if (!CullToCamera || (!bounds.IsEmpty && RectVisible(gridOrigin, bounds.Min, bounds.Max, heightOffset)))
+                    if (!CullToCamera ||
+                        (!bounds.IsEmpty && RectVisible(gridOrigin, bounds.Min, bounds.Max, heightOffset)))
                     {
                         ref var layers = ref composite.Layers;
                         for (var i = 0; i < layers.Length; i++)
@@ -302,7 +297,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 var color = shape.Weight >= 0 ? PositiveColor : NegativeColor;
                 color.a *= 0.8f;
 
-                // Cull stamps whose shape bounds are outside the camera frustum.
                 if (!IsStampVisible(gridOrigin, shape, heightOffset))
                     return;
 
@@ -315,10 +309,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
                 DrawShapeOutline(shape, snappedWorld, color, heightOffset);
 
-                // Far: just the stamp shape outline (drawn above) is the coarse summary. No center point or text.
                 if (tier >= DebugTier.Mid)
                 {
-                    // Mid: mark the stamp origin + one short label.
                     Drawer.Point(snappedWorld, 0.1f * CellSize, color);
                     if (DrawStampLabels || tier == DebugTier.Close)
                         Drawer.Text32(snappedWorld + Basis.Normal * 0.3f, "Stamp", color, 10f);
@@ -326,7 +318,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
                 if (tier == DebugTier.Close)
                 {
-                    // Close: every number — weight + cell origin coords.
                     var readout = new FixedString128Bytes();
                     readout.Append((FixedString32Bytes)"wt ");
                     readout.Append(shape.Weight);
@@ -537,19 +528,16 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     var slot = ActiveSlots[i];
                     var coord = CoordBySlot[slot];
 
-                    // Cull entire chunks outside the camera frustum before doing any work.
                     if (!IsChunkVisible(coord))
                         continue;
 
                     var baseIndex = slot * elements;
                     var chunkOrigin = new float2(coord.x * chunkSize, coord.y * chunkSize) * CellSize;
 
-                    // Far (always when enabled): chunk bounds are the coarse field outline.
                     if (DrawGrid) DrawChunkBounds(chunkOrigin, chunkSize);
 
                     if (!DrawValues) continue;
 
-                    // Mid: one short label per visible chunk, above the per-cell fills.
                     var chunkCenterWorld = Basis.ToWorldSpace(
                         chunkOrigin + new float2(chunkSize * CellSize * 0.5f), RenderHeight);
                     if (TimelineDebugTier.Resolve(chunkCenterWorld, Viewer, HasViewer) >= DebugTier.Mid)
@@ -557,7 +545,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
                     for (var y = 0; y < chunkSize; y += step)
                     for (var x = 0; x < chunkSize; x += step)
-                        DrawCell(Data[baseIndex + y * stride + x], chunkOrigin + new float2(x * CellSize, y * CellSize));
+                        DrawCell(Data[baseIndex + y * stride + x],
+                            chunkOrigin + new float2(x * CellSize, y * CellSize));
                 }
             }
 
@@ -568,7 +557,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 var cellCenterWorld = Basis.ToWorldSpace(cellGrid + new float2(CellSize * 0.5f), RenderHeight);
                 var tier = TimelineDebugTier.Resolve(cellCenterWorld, Viewer, HasViewer);
 
-                // Far: the chunk bounds (drawn above) are the coarse summary; skip per-cell fills entirely.
                 if (tier == DebugTier.Far)
                     return;
 
@@ -584,10 +572,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                     RenderHeight);
                 var c3 = Basis.ToWorldSpace(cellGrid + new float2(pad, CellSize - pad), RenderHeight);
 
-                // Mid: the gradient cell fills + one short label once per chunk.
                 Drawer.Quad(c0, c1, c2, c3, fill);
 
-                // Close: every cell's value as text. DrawValueText stays as an extra opt-in.
                 if (tier != DebugTier.Close)
                     return;
 

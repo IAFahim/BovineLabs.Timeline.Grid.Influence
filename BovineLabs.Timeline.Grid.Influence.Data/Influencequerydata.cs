@@ -19,8 +19,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public int2 Cell;
         public byte Valid;
 
-        // Sub-cell sampling at the query's continuous grid position: avoids the grid-aliasing of the snapped
-        // integer Value/Direction above. Both are raw (unnormalized) so callers can normalize as needed.
         public float ValueSmooth;
         public float2 DirectionSmooth;
     }

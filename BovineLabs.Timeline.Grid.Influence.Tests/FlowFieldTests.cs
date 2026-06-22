@@ -8,9 +8,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 {
     public class FlowFieldTests
     {
-        // The baked flow cache must reproduce the inline FieldGradient.Ascent it replaces, cell-for-cell,
-        // across every active chunk. Both read neighbours through the same FieldReader, so they can only ever
-        // diverge on the own-chunk freshness gate (covered separately below).
         [Test]
         public void BakedCacheMatchesInlineAscentOverActiveChunks()
         {
@@ -52,7 +49,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             field.Dispose();
         }
 
-        // A cell in a chunk that was not written this frame samples zero (the gate the steering path relies on).
         [Test]
         public void SampleReturnsZeroForUnwrittenChunk()
         {

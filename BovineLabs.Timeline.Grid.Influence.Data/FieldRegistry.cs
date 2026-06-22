@@ -50,6 +50,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             if (!Pairs.IsCreated || Count >= Pairs.Length) return FieldId.Invalid;
 
+            // Guard before allocating: a duplicate Key would make KeyToSlot.Add throw after we've
+            // already created persistent InfluenceFields, leaking them. Reject without advancing Count.
+            if (KeyToSlot.ContainsKey(config.Key)) return FieldId.Invalid;
+
             var i = Count++;
             ref var pair = ref this.Slot(i);
 

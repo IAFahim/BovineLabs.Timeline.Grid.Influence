@@ -48,7 +48,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                     RetentionFrames = field.RetentionFrames,
                     DoubleBuffered = field.DoubleBuffered,
                     DecayPerMille = field.DecayPerMille,
-                    SpreadDenominator = field.SpreadDenominator,
+                    SpreadDenominator = math.max(1, field.SpreadDenominator),
                     StrideAlignment = StrideAlignment
                 });
             }

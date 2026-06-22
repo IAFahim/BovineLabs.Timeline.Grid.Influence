@@ -143,7 +143,20 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             blob = CompositeBaker.Build(baseShape, weights, Allocator.Persistent);
             weights.Dispose();
 
-            return blob.IsCreated && blob.Value.Layers.Length > 0;
+            // CompositeBaker.Build always returns an IsCreated Persistent blob, even with 0 layers. If the composite
+            // contributes nothing (every layer weight rounded to 0, or every inset rasterized to empty bounds), the
+            // caller would overwrite this reference without disposing it, leaking the Persistent allocation. The baker
+            // only takes ownership via AddBlobAsset on the true path, so dispose here before reporting failure.
+            if (!(blob.IsCreated && blob.Value.Layers.Length > 0))
+            {
+                if (blob.IsCreated)
+                    blob.Dispose();
+
+                blob = default;
+                return false;
+            }
+
+            return true;
         }
 
         private bool HasSchemas()

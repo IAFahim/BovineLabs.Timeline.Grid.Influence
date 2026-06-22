@@ -41,7 +41,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             blob = CompositeBaker.Build(baseShape, weights, Allocator.Persistent);
             weights.Dispose();
 
-            return blob.IsCreated && blob.Value.Layers.Length > 0;
+            if (!blob.IsCreated || blob.Value.Layers.Length == 0)
+            {
+                if (blob.IsCreated)
+                    blob.Dispose();
+                blob = default;
+                return false;
+            }
+
+            return true;
         }
     }
 }

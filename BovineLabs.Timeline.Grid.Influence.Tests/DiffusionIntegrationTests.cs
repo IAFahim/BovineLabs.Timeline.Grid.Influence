@@ -80,33 +80,38 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             var decay = 30;
             var spreadDenom = 5;
 
-            var array = new NativeArray<Stamp>(initialStamps, Allocator.TempJob);
-            front.Schedule(array, default).Complete();
-            array.Dispose();
-
-            oracleGrid = StepOracle(oracleGrid, initialStamps, boxMin, decay, spreadDenom);
-
-            for (var step = 0; step < steps; step++)
+            try
             {
-                var reader = front.AsReader();
-                for (var x = 0; x < boxSize.x; x++)
-                for (var y = 0; y < boxSize.y; y++)
+                var array = new NativeArray<Stamp>(initialStamps, Allocator.TempJob);
+                front.Schedule(array, default).Complete();
+                array.Dispose();
+
+                oracleGrid = StepOracle(oracleGrid, initialStamps, boxMin, decay, spreadDenom);
+
+                for (var step = 0; step < steps; step++)
                 {
-                    var cell = new int2(boxMin.x + x, boxMin.y + y);
-                    var actual = reader.ReadCell(cell);
-                    var expected = oracleGrid[x, y];
-                    Assert.AreEqual(expected, actual, $"Mismatch at step {step}, cell {cell}");
+                    var reader = front.AsReader();
+                    for (var x = 0; x < boxSize.x; x++)
+                    for (var y = 0; y < boxSize.y; y++)
+                    {
+                        var cell = new int2(boxMin.x + x, boxMin.y + y);
+                        var actual = reader.ReadCell(cell);
+                        var expected = oracleGrid[x, y];
+                        Assert.AreEqual(expected, actual, $"Mismatch at step {step}, cell {cell}");
+                    }
+
+                    back.Schedule(default, default, StencilOf(ref front, decay, spreadDenom)).Complete();
+
+                    oracleGrid = StepOracle(oracleGrid, new Stamp[0], boxMin, decay, spreadDenom);
+
+                    (front, back) = (back, front);
                 }
-
-                back.Schedule(default, default, StencilOf(ref front, decay, spreadDenom)).Complete();
-
-                oracleGrid = StepOracle(oracleGrid, new Stamp[0], boxMin, decay, spreadDenom);
-
-                (front, back) = (back, front);
             }
-
-            front.Dispose();
-            back.Dispose();
+            finally
+            {
+                if (front.IsCreated) front.Dispose();
+                if (back.IsCreated) back.Dispose();
+            }
         }
 
         [Test]
@@ -119,34 +124,39 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             const int decay = 400;
             const int spreadDenom = 5;
 
-            var stamps = new NativeArray<Stamp>(
-                new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(2, 2), 1000), new int2(15, 15)) },
-                Allocator.TempJob);
-            front.Schedule(stamps, default).Complete();
-            stamps.Dispose();
-
-            Assert.Greater(front.ActiveSlotCount, 0);
-
-            var diedAt = -1;
-            for (var step = 0; step < 64; step++)
+            try
             {
-                back.Schedule(default, default, StencilOf(ref front, decay, spreadDenom)).Complete();
-                (front, back) = (back, front);
+                var stamps = new NativeArray<Stamp>(
+                    new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(2, 2), 1000), new int2(15, 15)) },
+                    Allocator.TempJob);
+                front.Schedule(stamps, default).Complete();
+                stamps.Dispose();
 
-                if (front.ActiveSlotCount == 0)
+                Assert.Greater(front.ActiveSlotCount, 0);
+
+                var diedAt = -1;
+                for (var step = 0; step < 64; step++)
                 {
-                    diedAt = step;
-                    break;
+                    back.Schedule(default, default, StencilOf(ref front, decay, spreadDenom)).Complete();
+                    (front, back) = (back, front);
+
+                    if (front.ActiveSlotCount == 0)
+                    {
+                        diedAt = step;
+                        break;
+                    }
                 }
+
+                Assert.GreaterOrEqual(diedAt, 0, "diffusion never decayed to an empty active set");
+                Assert.AreEqual(0, front.AsReader().ReadCell(new int2(15, 15)));
+                Assert.AreEqual(0, front.AsReader().ReadCell(new int2(16, 16)));
+                Assert.AreEqual(0, front.AsReader().ReadCell(new int2(8, 8)));
             }
-
-            Assert.GreaterOrEqual(diedAt, 0, "diffusion never decayed to an empty active set");
-            Assert.AreEqual(0, front.AsReader().ReadCell(new int2(15, 15)));
-            Assert.AreEqual(0, front.AsReader().ReadCell(new int2(16, 16)));
-            Assert.AreEqual(0, front.AsReader().ReadCell(new int2(8, 8)));
-
-            front.Dispose();
-            back.Dispose();
+            finally
+            {
+                if (front.IsCreated) front.Dispose();
+                if (back.IsCreated) back.Dispose();
+            }
         }
 
         [Test]
@@ -159,24 +169,29 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             const int decay = 400;
             const int spreadDenom = 5;
 
-            var stamps = new NativeArray<Stamp>(
-                new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(2, 2), 1000), new int2(8, 8)) },
-                Allocator.TempJob);
-            front.Schedule(stamps, default).Complete();
-            stamps.Dispose();
-
-            for (var step = 0; step < 80; step++)
+            try
             {
-                back.Schedule(default, default, StencilOf(ref front, decay, spreadDenom)).Complete();
-                (front, back) = (back, front);
+                var stamps = new NativeArray<Stamp>(
+                    new[] { new Stamp(InfluenceShape.SolidRect(int2.zero, new int2(2, 2), 1000), new int2(8, 8)) },
+                    Allocator.TempJob);
+                front.Schedule(stamps, default).Complete();
+                stamps.Dispose();
+
+                for (var step = 0; step < 80; step++)
+                {
+                    back.Schedule(default, default, StencilOf(ref front, decay, spreadDenom)).Complete();
+                    (front, back) = (back, front);
+                }
+
+                Assert.AreEqual(0, front.ActiveSlotCount);
+                Assert.Greater(front.FreeSlotsList.Length + back.FreeSlotsList.Length, 0,
+                    "no slots were reclaimed after the field died");
             }
-
-            Assert.AreEqual(0, front.ActiveSlotCount);
-            Assert.Greater(front.FreeSlotsList.Length + back.FreeSlotsList.Length, 0,
-                "no slots were reclaimed after the field died");
-
-            front.Dispose();
-            back.Dispose();
+            finally
+            {
+                if (front.IsCreated) front.Dispose();
+                if (back.IsCreated) back.Dispose();
+            }
         }
     }
 }

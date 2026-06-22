@@ -2,7 +2,6 @@ using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
 using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Data;
-using BovineLabs.Timeline.EntityLinks;
 using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Burst;
@@ -108,15 +107,13 @@ namespace BovineLabs.Timeline.Grid.Influence
                 if (targetEntity == Entity.Null)
                     return;
 
-                var originEntity = ResolveOrigin(clip, targetEntity);
+                var originEntity = OriginResolution.TryResolveOrigin(
+                    clip.OriginTarget, clip.OriginLinkKey, targetEntity, TargetsLookup, LinkSources, Links);
                 if (!LocalToWorldLookup.TryGetComponent(originEntity, out var localToWorld))
                     return;
 
-                var world = localToWorld.Position + math.rotate(localToWorld.Rotation, clip.LocalOffset);
-                var projected = Basis.ToGridSpace(world);
-                var origin = new int2(
-                    (int)math.floor(projected.x / CellSize),
-                    (int)math.floor(projected.y / CellSize));
+                var cellSpace = Basis.CellSpace(localToWorld.Position, localToWorld.Rotation, clip.LocalOffset, CellSize);
+                var origin = GridBasis.Cell(cellSpace);
 
                 if (clip.Composite.IsCreated)
                 {
@@ -133,30 +130,12 @@ namespace BovineLabs.Timeline.Grid.Influence
                     Emit(slotIndex, extras[i].Shape, weight.Value, origin);
             }
 
-            private Entity ResolveOrigin(in InfluenceClipData clip, Entity targetEntity)
-            {
-                if (clip.OriginTarget == Target.None || clip.OriginTarget == Target.Self)
-                    return targetEntity;
-
-                var targets = TargetsLookup.TryGetComponent(targetEntity, out var t) ? t : default;
-                var baseTarget = targets.Get(clip.OriginTarget, targetEntity);
-                if (baseTarget == Entity.Null)
-                    return targetEntity;
-
-                if (clip.OriginLinkKey != 0 &&
-                    EntityLinkResolver.TryResolve(baseTarget, clip.OriginLinkKey, LinkSources, Links, out var linked))
-                    return linked;
-
-                return baseTarget;
-            }
-
             private void Emit(int slotIndex, in InfluenceShape shape, float clipWeight, int2 origin)
             {
-                var scaledWeight = (int)math.round(shape.Weight * clipWeight);
-                if (scaledWeight == 0)
+                if (!shape.TryScaleWeight(clipWeight, out var scaled))
                     return;
 
-                StampsMap.Add(slotIndex, new Stamp(shape.WithWeight(scaledWeight), origin));
+                StampsMap.Add(slotIndex, new Stamp(scaled, origin));
             }
         }
     }

@@ -12,7 +12,9 @@
     "BovineLabs.Reaction.Data",
     "BovineLabs.Timeline",
     "BovineLabs.Timeline.Data",
-    "BovineLabs.Timeline.Physics.Data"
+    "BovineLabs.Timeline.Physics.Data",
+    "BovineLabs.Timeline.EntityLinks",
+    "BovineLabs.Timeline.EntityLinks.Data"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

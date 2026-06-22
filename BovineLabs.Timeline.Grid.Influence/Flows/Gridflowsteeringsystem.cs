@@ -94,11 +94,8 @@ namespace BovineLabs.Timeline.Grid.Influence
                     return;
 
                 var transform = TransformLookup[target];
-                var world = transform.Position + math.rotate(transform.Rotation, data.LocalOffset);
-                var projected = Basis.ToGridSpace(world);
-                var cell = new int2(
-                    (int)math.floor(projected.x / CellSize),
-                    (int)math.floor(projected.y / CellSize));
+                var cellSpace = Basis.CellSpace(transform.Position, transform.Rotation, data.LocalOffset, CellSize);
+                var cell = GridBasis.Cell(cellSpace);
 
                 var gradient = data.Bias.Sign() * Flow.Sample(cell);
                 var planar = FieldGradient.Normalized(gradient);

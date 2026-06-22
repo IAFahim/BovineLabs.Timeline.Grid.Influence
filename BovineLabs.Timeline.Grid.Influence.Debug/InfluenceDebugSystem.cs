@@ -7,7 +7,6 @@ using BovineLabs.Quill;
 using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Core.Debug;
 using BovineLabs.Timeline.Data;
-using BovineLabs.Timeline.EntityLinks;
 using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Burst;
@@ -241,28 +240,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 var targetEntity = binding.Value;
                 if (targetEntity == Entity.Null) return;
 
-                var originEntity = targetEntity;
-
-                if (clip.OriginTarget != Target.None && clip.OriginTarget != Target.Self)
-                {
-                    var targets = TargetsLookup.TryGetComponent(targetEntity, out var t) ? t : default;
-                    var baseTarget = targets.Get(clip.OriginTarget, targetEntity);
-                    if (baseTarget != Entity.Null)
-                    {
-                        originEntity = baseTarget;
-                        if (clip.OriginLinkKey != 0 && EntityLinkResolver.TryResolve(baseTarget, clip.OriginLinkKey,
-                                LinkSources, Links, out var linked)) originEntity = linked;
-                    }
-                }
+                var originEntity = OriginResolution.TryResolveOrigin(
+                    clip.OriginTarget, clip.OriginLinkKey, targetEntity, TargetsLookup, LinkSources, Links);
 
                 if (!LocalToWorldLookup.TryGetComponent(originEntity, out var localToWorld)) return;
 
-                var origin = localToWorld.Position + math.rotate(localToWorld.Rotation, clip.LocalOffset);
-                var projected = Basis.ToGridSpace(origin);
-
-                var gridOrigin = new int2(
-                    (int)math.floor(projected.x / CellSize),
-                    (int)math.floor(projected.y / CellSize));
+                var cellSpace = Basis.CellSpace(localToWorld.Position, localToWorld.Rotation, clip.LocalOffset, CellSize);
+                var gridOrigin = GridBasis.Cell(cellSpace);
 
                 var heightOffset = RenderHeight;
 
@@ -290,10 +274,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
 
             private void DrawShape(in InfluenceShape rawShape, float weightValue, int2 gridOrigin, float heightOffset)
             {
-                var scaledWeight = (int)math.round(rawShape.Weight * weightValue);
-                if (scaledWeight == 0) return;
+                if (!rawShape.TryScaleWeight(weightValue, out var shape)) return;
 
-                var shape = rawShape.WithWeight(scaledWeight);
                 var color = shape.Weight >= 0 ? PositiveColor : NegativeColor;
                 color.a *= 0.8f;
 

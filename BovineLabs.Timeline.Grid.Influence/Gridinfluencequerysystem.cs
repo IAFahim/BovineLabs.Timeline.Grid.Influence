@@ -2,7 +2,6 @@ using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
 using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Data;
-using BovineLabs.Timeline.EntityLinks;
 using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using BovineLabs.Timeline.Grid.Influence.Data.Flows;
@@ -92,7 +91,8 @@ namespace BovineLabs.Timeline.Grid.Influence
                 if (targetEntity == Entity.Null)
                     return;
 
-                var originEntity = ResolveOrigin(query, targetEntity);
+                var originEntity = OriginResolution.TryResolveOrigin(
+                    query.OriginTarget, query.OriginLinkKey, targetEntity, TargetsLookup, LinkSources, Links);
                 if (!LocalToWorldLookup.TryGetComponent(originEntity, out var localToWorld))
                     return;
 
@@ -100,11 +100,8 @@ namespace BovineLabs.Timeline.Grid.Influence
                 if (!field.IsCreated)
                     return;
 
-                var world = localToWorld.Position + math.rotate(localToWorld.Rotation, query.LocalOffset);
-                var projected = Basis.ToGridSpace(world);
-                var cell = new int2(
-                    (int)math.floor(projected.x / CellSize),
-                    (int)math.floor(projected.y / CellSize));
+                var cellSpace = Basis.CellSpace(localToWorld.Position, localToWorld.Rotation, query.LocalOffset, CellSize);
+                var cell = GridBasis.Cell(cellSpace);
 
                 var reader = field.AsReader();
 
@@ -112,7 +109,6 @@ namespace BovineLabs.Timeline.Grid.Influence
                 result.Value = reader.ReadCell(cell);
                 result.Direction = FieldGradient.Ascent(reader, cell);
 
-                var cellSpace = new float2(projected.x / CellSize, projected.y / CellSize);
                 result.ValueSmooth = reader.SampleBilinear(cellSpace);
                 result.DirectionSmooth = new float2(
                     reader.SampleBilinear(cellSpace + new float2(1f, 0f)) -
@@ -121,23 +117,6 @@ namespace BovineLabs.Timeline.Grid.Influence
                     reader.SampleBilinear(cellSpace - new float2(0f, 1f)));
 
                 result.Valid = 1;
-            }
-
-            private Entity ResolveOrigin(in InfluenceQueryData query, Entity targetEntity)
-            {
-                if (query.OriginTarget == Target.None || query.OriginTarget == Target.Self)
-                    return targetEntity;
-
-                var targets = TargetsLookup.TryGetComponent(targetEntity, out var t) ? t : default;
-                var baseTarget = targets.Get(query.OriginTarget, targetEntity);
-                if (baseTarget == Entity.Null)
-                    return targetEntity;
-
-                if (query.OriginLinkKey != 0 &&
-                    EntityLinkResolver.TryResolve(baseTarget, query.OriginLinkKey, LinkSources, Links, out var linked))
-                    return linked;
-
-                return baseTarget;
             }
         }
     }

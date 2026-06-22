@@ -78,6 +78,20 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool TryScaleWeight(float clipWeight, out InfluenceShape scaled)
+        {
+            var scaledWeight = (int)math.round(Weight * clipWeight);
+            if (scaledWeight == 0)
+            {
+                scaled = default;
+                return false;
+            }
+
+            scaled = WithWeight(scaledWeight);
+            return true;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static InfluenceShape SolidRect(int2 min, int2 size, int weight)
         {
             return new InfluenceShape(ShapeKind.SolidRect, weight, min, size, 0, 0, int2.zero);

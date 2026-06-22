@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data
@@ -26,6 +27,19 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public float3 ToWorldSpace(float2 gridPosition, float heightOffset)
         {
             return Right * gridPosition.x + Forward * gridPosition.y + Normal * heightOffset;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public float2 CellSpace(float3 worldPosition, quaternion rotation, float3 localOffset, float cellSize)
+        {
+            var world = worldPosition + math.rotate(rotation, localOffset);
+            return ToGridSpace(world) / cellSize;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int2 Cell(float2 cellSpace)
+        {
+            return new int2((int)math.floor(cellSpace.x), (int)math.floor(cellSpace.y));
         }
     }
 }

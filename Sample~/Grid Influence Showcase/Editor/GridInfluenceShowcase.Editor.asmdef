@@ -1,0 +1,40 @@
+{
+    "name": "BovineLabs.Timeline.Grid.Influence.Sample.GridInfluenceShowcase",
+    "rootNamespace": "",
+    "references": [
+        "BovineLabs.Timeline.Grid.Influence.Authoring",
+        "BovineLabs.Timeline.Grid.Influence",
+        "BovineLabs.Timeline.Grid.Influence.Data",
+        "BovineLabs.Reaction.Data",
+        "BovineLabs.Reaction.Authoring",
+        "BovineLabs.Core",
+        "BovineLabs.Core.Extensions",
+        "BovineLabs.Core.Authoring",
+        "BovineLabs.Core.Extensions.Authoring",
+        "BovineLabs.Timeline.Authoring",
+        "BovineLabs.Timeline.Core.Authoring",
+        "BovineLabs.Timeline.Data",
+        "BovineLabs.Timeline.Transform.Authoring",
+        "BovineLabs.Timeline.EntityLinks.Authoring",
+        "BovineLabs.Timeline.EntityLinks.Data",
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Mathematics",
+        "Unity.Scenes",
+        "Unity.Timeline",
+        "Unity.Transforms",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

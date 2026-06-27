@@ -25,5 +25,17 @@
     "grid"
   ],
   "changelogUrl": "CHANGELOG.md",
-  "licensesUrl": "LICENSE.md"
+  "licensesUrl": "LICENSE.md",
+  "samples": [
+    {
+      "displayName": "Grid Influence Showcase",
+      "description": "Influence-field timeline tracks: WRITE stamps, COMPOSITE blobs, FLOW steering and QUERY read-back over a shared 2D field.",
+      "path": "Sample~/Grid Influence Showcase"
+    },
+    {
+      "displayName": "Steering Showcase",
+      "description": "Classic steering behaviours composed from timeline tracks - Physics PID vs Grid influence-field paradigms side by side.",
+      "path": "Sample~/Steering Showcase"
+    }
+  ]
 }

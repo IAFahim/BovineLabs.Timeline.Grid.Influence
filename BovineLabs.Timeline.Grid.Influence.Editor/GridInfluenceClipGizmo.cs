@@ -18,6 +18,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
         static GridInfluenceClipGizmo()
         {
             SceneView.duringSceneGui += OnSceneGui;
+            // ponytail: CoreCLR/no-domain-reload — drop this sub before the assembly unloads or it accumulates per recompile. Upgrade path: [OnCodeUnloading].
+            AssemblyReloadEvents.beforeAssemblyReload += () => SceneView.duringSceneGui -= OnSceneGui;
         }
 
         private static void OnSceneGui(SceneView view)

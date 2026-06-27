@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using BovineLabs.Timeline.Grid.Influence.Authoring;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Mathematics;
+using Unity.Scripting.LifecycleManagement;
 using UnityEditor;
 using UnityEditor.Timeline;
 using UnityEngine;
@@ -11,16 +12,18 @@ using UnityEngine.Timeline;
 namespace BovineLabs.Timeline.Grid.Influence.Editor
 {
     [InitializeOnLoad]
-    public static class GridInfluenceClipGizmo
+    public static partial class GridInfluenceClipGizmo
     {
         private static readonly List<InfluenceShape> Shapes = new();
 
         static GridInfluenceClipGizmo()
         {
             SceneView.duringSceneGui += OnSceneGui;
-            // ponytail: CoreCLR/no-domain-reload — drop this sub before the assembly unloads or it accumulates per recompile. Upgrade path: [OnCodeUnloading].
-            AssemblyReloadEvents.beforeAssemblyReload += () => SceneView.duringSceneGui -= OnSceneGui;
         }
+
+        // CoreCLR/no-domain-reload: unsubscribe before this assembly unloads on a code reload, else the sub accumulates per recompile.
+        [OnCodeUnloading]
+        private static void OnCodeUnloading() => SceneView.duringSceneGui -= OnSceneGui;
 
         private static void OnSceneGui(SceneView view)
         {

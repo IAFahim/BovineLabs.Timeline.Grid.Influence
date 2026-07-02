@@ -37,10 +37,22 @@ namespace BovineLabs.Timeline.Grid.Influence
             var basis = new GridBasis(settings.PlaneNormal);
             var deltaTime = SystemAPI.Time.DeltaTime;
 
+            // Only resolve flow for fields an active steering clip actually references — resolving every
+            // registered field's gradient each frame is wasted work for query-only / inactive fields.
+            var activeKeys = new NativeHashSet<ushort>(math.max(1, reg.Count), state.WorldUpdateAllocator);
+            foreach (var data in SystemAPI.Query<RefRO<GridFlowSteeringData>>().WithAll<ClipActive>())
+                activeKeys.Add(data.ValueRO.FieldKey);
+
+            if (activeKeys.IsEmpty)
+                return;
+
             var dependency = state.Dependency;
             for (var i = 0; i < reg.Count; i++)
             {
                 ref var pair = ref reg.Slot(i);
+                if (!activeKeys.Contains(pair.Config.Key))
+                    continue;
+
                 var field = pair.Front;
                 if (!field.IsCreated)
                     continue;

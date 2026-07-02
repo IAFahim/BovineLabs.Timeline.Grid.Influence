@@ -31,7 +31,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         [Header("Footprint")] public Quarter Rotation = Quarter.R0;
 
         public FalloffMode Falloff = FalloffMode.None;
-        public int FalloffSteps = 3;
+        [Min(0)] public int FalloffSteps = 3;
         public int FalloffSpacing = 2;
 
         [Header("Transform")]
@@ -159,9 +159,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 return false;
             }
 
-            if (Stamp == null)
+            var hasComposite = Composite != null && Composite.Base != null;
+            if (Stamp == null && !hasComposite)
             {
-                Debug.LogError($"GridInfluenceClip '{name}' has no Stamp schema assigned. Clip will be skipped.", this);
+                Debug.LogError($"GridInfluenceClip '{name}' has no Stamp or Composite schema assigned. Clip will be skipped.", this);
                 return false;
             }
 

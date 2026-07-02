@@ -70,6 +70,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         public InfluenceField Front(FieldId id)
         {
+            if (!id.IsValid || (uint)id.Value >= (uint)Count)
+                return default;
+
             return this.Slot(id.Value).Front;
         }
 

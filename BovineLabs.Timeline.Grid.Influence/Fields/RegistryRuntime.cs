@@ -3,6 +3,7 @@ using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
+using UnityEngine;
 
 namespace BovineLabs.Timeline.Grid.Influence.Fields
 {
@@ -37,7 +38,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
             registry.Initialize(configs.Length, Allocator.Persistent);
 
             foreach (var config in configs)
-                registry.Register(new FieldConfig
+            {
+                var id = registry.Register(new FieldConfig
                 {
                     Key = config.Key,
                     Name = config.Name,
@@ -48,6 +50,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
                     SpreadDenominator = config.SpreadDenominator,
                     StrideAlignment = config.StrideAlignment
                 }, Allocator.Persistent);
+
+                if (!id.IsValid)
+                    Debug.LogWarning($"[GridInfluence] Field '{config.Name}' (key {config.Key}) was dropped (duplicate or capacity); clips using this key will resolve to a different field.");
+            }
 
             var e = state.EntityManager.CreateEntity();
             state.EntityManager.AddComponentData(e, new FieldRegistrySingleton

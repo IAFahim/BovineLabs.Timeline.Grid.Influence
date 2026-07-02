@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BovineLabs.Timeline.Grid.Influence.Data;
+using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Grid.Influence.Authoring
 {
@@ -20,7 +21,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         public static void CollectStamp(GridInfluenceClip clip, GridStampSchemaObject schema, List<InfluenceShape> into)
         {
             var scale = clip.WeightMultiplier * clip.Polarity.Sign();
-            var rings = clip.Falloff == FalloffMode.Stepped ? clip.FalloffSteps : 0;
+            var rings = clip.Falloff == FalloffMode.Stepped ? math.max(0, clip.FalloffSteps) : 0;
             var spacing = clip.FalloffSpacing < 1 ? 1 : clip.FalloffSpacing;
 
             AddExpanded(into, schema, scale, clip.Rotation, rings, spacing);

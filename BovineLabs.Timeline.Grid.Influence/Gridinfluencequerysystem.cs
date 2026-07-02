@@ -43,6 +43,7 @@ namespace BovineLabs.Timeline.Grid.Influence
             _linkSourceLookup.Update(ref state);
             _linkLookup.Update(ref state);
             _localToWorldLookup.Update(ref state);
+            state.Dependency = new ResetQueryJob().ScheduleParallel(state.Dependency);
 
             var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
             ref var fieldSingleton = ref SystemAPI.GetSingletonRW<FieldRegistrySingleton>().ValueRW;
@@ -117,6 +118,16 @@ namespace BovineLabs.Timeline.Grid.Influence
                     reader.SampleBilinear(cellSpace - new float2(0f, 1f)));
 
                 result.Valid = 1;
+            }
+        }
+        [BurstCompile]
+        [WithDisabled(typeof(ClipActive))]
+        private partial struct ResetQueryJob : IJobEntity
+        {
+            private void Execute(ref InfluenceQueryResult result)
+            {
+                if (result.Valid != 0)
+                    result = default;
             }
         }
     }

@@ -7,6 +7,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Transforms;
+using UnityEngine;
 
 namespace BovineLabs.Timeline.Grid.Influence
 {
@@ -18,12 +19,22 @@ namespace BovineLabs.Timeline.Grid.Influence
     {
         private ComponentLookup<LocalTransform> _transformLookup;
 
+        // Field keys we've already warned are unregistered, so the diagnostic fires once per key, not every frame.
+        private NativeHashSet<ushort> _warnedMissing;
+
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<InfluenceGridSettings>();
             state.RequireForUpdate<FieldRegistrySingleton>();
 
             _transformLookup = state.GetComponentLookup<LocalTransform>();
+            _warnedMissing = new NativeHashSet<ushort>(8, Allocator.Persistent);
+        }
+
+        public void OnDestroy(ref SystemState state)
+        {
+            if (_warnedMissing.IsCreated)
+                _warnedMissing.Dispose();
         }
 
         public void OnUpdate(ref SystemState state)
@@ -45,6 +56,31 @@ namespace BovineLabs.Timeline.Grid.Influence
 
             if (activeKeys.IsEmpty)
                 return;
+
+            // Diagnose steering clips pointing at an unregistered field key — otherwise a silent no-op (the clip
+            // never moves the agent and there is no field to steer by). Warned once per key.
+            foreach (var key in activeKeys)
+            {
+                if (_warnedMissing.Contains(key))
+                    continue;
+
+                var registered = false;
+                for (var i = 0; i < reg.Count; i++)
+                {
+                    if (reg.Slot(i).Config.Key == key)
+                    {
+                        registered = true;
+                        break;
+                    }
+                }
+
+                if (!registered)
+                {
+                    _warnedMissing.Add(key);
+                    Debug.LogWarning($"GridFlowSteering: a steering clip references field key {key}, which is not " +
+                        "registered; the clip will do nothing until an InfluenceField with that key exists in the world.");
+                }
+            }
 
             var dependency = state.Dependency;
             for (var i = 0; i < reg.Count; i++)

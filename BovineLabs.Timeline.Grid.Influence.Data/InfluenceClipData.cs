@@ -1,4 +1,4 @@
-using BovineLabs.Reaction.Data.Core;
+using BovineLabs.Timeline.EntityLinks.Data;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -11,7 +11,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         public BlobAssetReference<CompositeShapeBlob> Composite;
         public float3 LocalOffset;
 
-        public Target OriginTarget;
-        public ushort OriginLinkKey;
+        public EntityLinkRef Origin;
     }
 }

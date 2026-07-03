@@ -13,13 +13,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
     [Serializable]
     public sealed class GridInfluenceQueryClip : DOTSClip, ITimelineClipAsset
     {
-        [Header("Schemas")] public GridFieldSchemaObject Field;
-
-        [Header("Transform")] public Vector3 LocalOffset;
-
         [Header("Routing")] public Target originTarget = Target.Owner;
 
         public EntityLinkSchema originLink;
+
+        [Header("Schemas")] public GridFieldSchemaObject Field;
+
+        [Header("Transform")] public Vector3 LocalOffset;
 
         public override double duration => 1.0;
         public ClipCaps clipCaps => ClipCaps.Looping;
@@ -42,20 +42,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             {
                 FieldKey = Field.Id,
                 LocalOffset = LocalOffset,
-                OriginTarget = originTarget,
-                OriginLinkKey = ResolveLinkKey()
+                Origin = EntityLinkAuthoringUtility.BakeRef(context.Baker, originLink, originTarget)
             };
             var commands = new BakerCommands(context.Baker, clipEntity);
             builder.ApplyTo(ref commands);
 
             base.Bake(clipEntity, context);
-        }
-
-        private ushort ResolveLinkKey()
-        {
-            return originLink != null && EntityLinkAuthoringUtility.TryGetKey(originLink, out var key)
-                ? key
-                : (ushort)0;
         }
     }
 }

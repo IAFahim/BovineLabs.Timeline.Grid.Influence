@@ -93,7 +93,7 @@ namespace BovineLabs.Timeline.Grid.Influence
                     return;
 
                 var originEntity = OriginResolution.TryResolveOrigin(
-                    query.OriginTarget, query.OriginLinkKey, targetEntity, TargetsLookup, LinkSources, Links);
+                    query.Origin, targetEntity, TargetsLookup, LinkSources, Links);
                 if (!LocalToWorldLookup.TryGetComponent(originEntity, out var localToWorld))
                     return;
 

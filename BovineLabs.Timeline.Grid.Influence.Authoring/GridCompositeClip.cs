@@ -16,6 +16,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
     [Serializable]
     public sealed class GridCompositeClip : DOTSClip, ITimelineClipAsset
     {
+        [Header("Routing")] public Target originTarget = Target.Owner;
+
+        public EntityLinkSchema originLink;
+
         [Header("Schemas")] public GridFieldSchemaObject Field;
 
         public GridCompositeSchemaObject Composite;
@@ -23,10 +27,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
         [Header("Semantics")] public Polarity Polarity = Polarity.Additive;
 
         [Header("Transform")] public Vector3 LocalOffset;
-
-        [Header("Routing")] public Target originTarget = Target.Owner;
-
-        public EntityLinkSchema originLink;
 
         public override double duration => 1.0;
         public ClipCaps clipCaps => ClipCaps.Blending | ClipCaps.Looping;
@@ -49,8 +49,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 FieldKey = Field.Id,
                 Composite = blob,
                 LocalOffset = LocalOffset,
-                OriginTarget = originTarget,
-                OriginLinkKey = ResolveLinkKey()
+                Origin = EntityLinkAuthoringUtility.BakeRef(context.Baker, originLink, originTarget)
             };
             var commands = new BakerCommands(context.Baker, clipEntity);
             builder.ApplyTo(ref commands);
@@ -134,13 +133,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             }
 
             return true;
-        }
-
-        private ushort ResolveLinkKey()
-        {
-            return originLink != null && EntityLinkAuthoringUtility.TryGetKey(originLink, out var key)
-                ? key
-                : (ushort)0;
         }
 
         private void BindOriginTransform(BakingContext context)

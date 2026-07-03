@@ -11,26 +11,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Entity TryResolveOrigin(
-            Target originTarget,
-            ushort originLinkKey,
+            in EntityLinkRef origin,
             Entity targetEntity,
             in UnsafeComponentLookup<Targets> targetsLookup,
             in UnsafeComponentLookup<EntityLinkSource> linkSources,
             in UnsafeBufferLookup<EntityLinkEntry> links)
         {
-            if (originTarget == Target.None || originTarget == Target.Self)
-                return targetEntity;
-
             var targets = targetsLookup.TryGetComponent(targetEntity, out var t) ? t : default;
-            var baseTarget = targets.Get(originTarget, targetEntity);
-            if (baseTarget == Entity.Null)
-                return targetEntity;
-
-            if (originLinkKey != 0 &&
-                EntityLinkResolver.TryResolve(baseTarget, originLinkKey, linkSources, links, out var linked))
-                return linked;
-
-            return baseTarget;
+            return origin.TryResolve(targetEntity, targets, linkSources, links, out var e) ? e : targetEntity;
         }
     }
 }

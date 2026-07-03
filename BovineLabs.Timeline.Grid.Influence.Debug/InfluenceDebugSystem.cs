@@ -241,7 +241,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 if (targetEntity == Entity.Null) return;
 
                 var originEntity = OriginResolution.TryResolveOrigin(
-                    clip.OriginTarget, clip.OriginLinkKey, targetEntity, TargetsLookup, LinkSources, Links);
+                    clip.Origin, targetEntity, TargetsLookup, LinkSources, Links);
 
                 if (!LocalToWorldLookup.TryGetComponent(originEntity, out var localToWorld)) return;
 

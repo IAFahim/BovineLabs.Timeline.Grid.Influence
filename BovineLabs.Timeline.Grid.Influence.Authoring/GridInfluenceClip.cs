@@ -16,6 +16,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
     [Serializable]
     public sealed class GridInfluenceClip : DOTSClip, ITimelineClipAsset
     {
+        [Header("Routing")] public Target originTarget = Target.Owner;
+
+        public EntityLinkSchema originLink;
+
         [Header("Schemas")] public GridFieldSchemaObject Field;
 
         public GridStampSchemaObject Stamp;
@@ -41,10 +45,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
         public Vector3 LocalOffset;
 
-        [Header("Routing")] public Target originTarget = Target.Owner;
-
-        public EntityLinkSchema originLink;
-
         [Header("Display")]
         [Tooltip(
             "Editor-only: tints the clip and gizmo for visual grouping. Has no effect on runtime field routing, which is determined solely by the assigned Field schema.")]
@@ -59,7 +59,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 return;
 
             context.Baker.DependsOn(Field);
-            context.Baker.DependsOn(originLink);
             DependOnStamps(context);
             BindOriginTransform(context);
 
@@ -93,8 +92,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 Shape = primaryShapes.Count > 0 ? primaryShapes[0] : default,
                 Composite = compositeBlob,
                 LocalOffset = LocalOffset,
-                OriginTarget = originTarget,
-                OriginLinkKey = ResolveLinkKey()
+                Origin = EntityLinkAuthoringUtility.BakeRef(context.Baker, originLink, originTarget)
             };
             var commands = new BakerCommands(context.Baker, clipEntity);
             builder.ApplyTo(ref commands);
@@ -178,13 +176,6 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             foreach (var extra in ExtraStamps)
                 if (extra != null)
                     context.Baker.DependsOn(extra);
-        }
-
-        private ushort ResolveLinkKey()
-        {
-            return originLink != null && EntityLinkAuthoringUtility.TryGetKey(originLink, out var key)
-                ? key
-                : (ushort)0;
         }
 
         private void BindOriginTransform(BakingContext context)

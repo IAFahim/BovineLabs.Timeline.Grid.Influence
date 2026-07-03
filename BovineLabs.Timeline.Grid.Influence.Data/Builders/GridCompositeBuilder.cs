@@ -1,5 +1,5 @@
 using BovineLabs.Core.EntityCommands;
-using BovineLabs.Reaction.Data.Core;
+using BovineLabs.Timeline.EntityLinks.Data;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -10,8 +10,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data.Builders
         public ushort FieldKey;
         public BlobAssetReference<CompositeShapeBlob> Composite;
         public float3 LocalOffset;
-        public Target OriginTarget;
-        public ushort OriginLinkKey;
+        public EntityLinkRef Origin;
 
         public void ApplyTo<T>(ref T builder)
             where T : struct, IEntityCommands
@@ -21,8 +20,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data.Builders
                 FieldKey = FieldKey,
                 Composite = Composite,
                 LocalOffset = LocalOffset,
-                OriginTarget = OriginTarget,
-                OriginLinkKey = OriginLinkKey
+                Origin = Origin
             });
         }
     }

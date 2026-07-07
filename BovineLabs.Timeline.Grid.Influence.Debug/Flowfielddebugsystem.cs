@@ -230,28 +230,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 if (CameraCulling.IsDefault)
                     return true;
 
-                var chunkSize = Spec.ChunkSize;
-                var edge = chunkSize * CellSize;
-
-                var origin = new float2(coord.x * chunkSize, coord.y * chunkSize) * CellSize;
-
-                var p0 = Basis.ToWorldSpace(origin, RenderHeight);
-                var p1 = Basis.ToWorldSpace(origin + new float2(edge, 0f), RenderHeight);
-                var p2 = Basis.ToWorldSpace(origin + new float2(edge, edge), RenderHeight);
-                var p3 = Basis.ToWorldSpace(origin + new float2(0f, edge), RenderHeight);
-
-                var min = math.min(math.min(p0, p1), math.min(p2, p3));
-                var max = math.max(math.max(p0, p1), math.max(p2, p3));
-
-                var margin = math.max(0.1f, CellSize);
-
-                var aabb = new AABB
-                {
-                    Center = (min + max) * 0.5f,
-                    Extents = (max - min) * 0.5f + new float3(margin)
-                };
-
-                return CameraCulling.AnyIntersect(aabb);
+                return GridDebugCulling.ChunkVisible(Basis, CameraCulling, CellSize, coord, Spec.ChunkSize, RenderHeight);
             }
 
             private void DrawArrow(int2 cell, float2 direction)

@@ -8,6 +8,15 @@ using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data
 {
+    public struct FieldFrameStats
+    {
+        public int StampsIn;
+        public int StampsDroppedSpanBudget;
+        public int StampsDroppedChunkBudget;
+        public int ChunksActivated;
+        public int ChunksEvicted;
+    }
+
     public unsafe partial struct InfluenceField : INativeDisposable
     {
         private NativeFlatMap _slotByCoord;
@@ -27,6 +36,12 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         private NativeArray<int> _emptyInts;
         private NativeArray<int2> _emptyCoords;
         private NativeArray<byte> _emptyBytes;
+        private NativeArray<uint> _emptyUints;
+
+        private NativeReference<FieldFrameStats> _stats;
+
+        private bool _hasPendingTick;
+        private uint _pendingTick;
 
         private GridSpec _spec;
         private JobHandle _dependency;
@@ -57,6 +72,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 _emptyInts = new NativeArray<int>(0, allocator),
                 _emptyCoords = new NativeArray<int2>(0, allocator),
                 _emptyBytes = new NativeArray<byte>(0, allocator),
+                _emptyUints = new NativeArray<uint>(0, allocator),
+                _stats = new NativeReference<FieldFrameStats>(allocator, NativeArrayOptions.ClearMemory),
                 _spec = spec,
                 FrameId = 1,
                 _dependency = default
@@ -88,6 +105,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             public NativeArray<int> Data;
             public NativeArray<byte> NonZeroBySlot;
             public NativeFlatMap.ReadOnly SlotByCoord;
+            public NativeArray<uint> LastWrittenBySlot;
+            public uint FrameId;
             public int DecayPerMille;
             public int SpreadDenominator;
         }
@@ -96,6 +115,26 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         {
             Complete();
             return AsReader().ReadCell(cell);
+        }
+
+        internal void SetNextFrameId(uint tick)
+        {
+            _hasPendingTick = true;
+            _pendingTick = tick;
+        }
+
+        public JobHandle Schedule(NativeParallelMultiHashMap<int, Stamp>.ReadOnly stampsMap, int slotIndex,
+            uint tick, JobHandle dependsOn, StencilConfig stencil = default)
+        {
+            SetNextFrameId(tick);
+            return Schedule(stampsMap, slotIndex, dependsOn, stencil);
+        }
+
+        public JobHandle Schedule(NativeArray<Stamp> stamps, uint tick, JobHandle dependsOn,
+            StencilConfig stencil = default)
+        {
+            SetNextFrameId(tick);
+            return Schedule(stamps, dependsOn, stencil);
         }
 
         public JobHandle Schedule(NativeParallelMultiHashMap<int, Stamp>.ReadOnly stampsMap, int slotIndex,

@@ -1,3 +1,5 @@
+using System;
+using System.Diagnostics;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -6,6 +8,12 @@ using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Grid.Influence.Data
 {
+    /// <summary>
+    /// Open-addressing int2 -> int map with linear probing and backward-shift deletion. Carries no safety
+    /// handles: it is a single-threaded-writer container. Add, Remove and Grow must never run concurrently
+    /// with any reader, and every reader (see <see cref="AsReadOnly"/>) must be ordered after the writer's
+    /// job through an explicit <see cref="JobHandle"/> dependency.
+    /// </summary>
     public unsafe struct NativeFlatMap : INativeDisposable
     {
         internal struct State
@@ -92,6 +100,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             _state->keys[i] = key;
             _state->vals[i] = value;
             _state->count++;
+            CheckLoadInvariant();
+        }
+
+        [Conditional("ENABLE_UNITY_COLLECTIONS_CHECKS")]
+        private void CheckLoadInvariant()
+        {
+            if (_state->count * 4 > (_state->mask + 1) * 3)
+                throw new InvalidOperationException("NativeFlatMap load factor exceeded 3/4; Grow did not run");
         }
 
         public bool Remove(int2 key)

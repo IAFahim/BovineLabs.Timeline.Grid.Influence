@@ -14,46 +14,77 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
     public class GridStampSchemaObject : ScriptableObject, IUID
     {
         private const int RayScale = 1024;
+
+        // Extents (radii, rect/canvas sizes) are capped to bound per-frame chunk allocation; a huge radius
+        // activates millions of chunks on the single-threaded prepare job. Endpoint coordinates are capped to
+        // keep bounds sane (matching the PaintMin clamp).
+        private const int MaxExtent = 512;
+        private const int MaxCoord = 4096;
+
         [SerializeField] [InspectorReadOnly] private int id;
 
         public ShapeKind Kind = ShapeKind.Disc;
+
+        [Tooltip(
+            "Per-cell weight added to the field (plain integer, no x100 fixed point). Prefer >= 8-10: smaller weights quantize to 0 during clip blending and pop in/out.")]
         public int BaseWeight = 1;
 
         [Header("Solid Rect / Rect Shell")] public Vector2Int RectMin = new(-5, -5);
 
+        [Tooltip("Rect size in cells. Clamped to 0..512 per axis to bound chunk allocation.")]
         public Vector2Int RectSize = new(10, 10);
+
+        [Tooltip("Shell thickness in cells. Clamped to 1..512.")]
         public int ShellThickness = 1;
 
         [Header("Disc")] public Vector2Int DiscCenter = Vector2Int.zero;
 
+        [Tooltip("Disc radius in cells. Clamped to 0..512 to bound chunk allocation.")]
         public int DiscRadius = 5;
 
         [Header("Annulus")] public Vector2Int AnnulusCenter = Vector2Int.zero;
 
+        [Tooltip("Outer radius in cells. Clamped to 0..512 to bound chunk allocation.")]
         public int AnnulusOuterRadius = 5;
+
         public int AnnulusInnerRadius = 3;
 
-        [Header("Capsule")] public Vector2Int CapsuleStart = new(-3, 0);
+        [Header("Capsule")]
+        [Tooltip("Endpoint in cells, relative to the stamp origin. Clamped to +/-4096.")]
+        public Vector2Int CapsuleStart = new(-3, 0);
 
+        [Tooltip("Endpoint in cells, relative to the stamp origin. Clamped to +/-4096.")]
         public Vector2Int CapsuleEnd = new(3, 5);
+
+        [Tooltip("Capsule radius in cells. Clamped to 0..512 to bound chunk allocation.")]
         public int CapsuleRadius = 5;
 
         [Header("Ellipse")] public Vector2Int EllipseCenter = Vector2Int.zero;
 
+        [Tooltip("Ellipse radii in cells. Clamped to 0..512 per axis to bound chunk allocation.")]
         public Vector2Int EllipseRadii = new(5, 3);
 
         [Header("Rounded Rect")] public Vector2Int RoundedRectMin = new(-5, -3);
 
+        [Tooltip("Rect size in cells. Clamped to 0..512 per axis to bound chunk allocation.")]
         public Vector2Int RoundedRectSize = new(10, 6);
+
+        [Tooltip("Corner radius in cells. Clamped to 0..512.")]
         public int RoundedRectRadius = 2;
 
-        [Header("Thick Line")] public Vector2Int ThickLineStart = new(-5, 0);
+        [Header("Thick Line")]
+        [Tooltip("Endpoint in cells, relative to the stamp origin. Clamped to +/-4096.")]
+        public Vector2Int ThickLineStart = new(-5, 0);
 
+        [Tooltip("Endpoint in cells, relative to the stamp origin. Clamped to +/-4096.")]
         public Vector2Int ThickLineEnd = new(5, 0);
+
+        [Tooltip("Line radius in cells. Clamped to 0..512 to bound chunk allocation.")]
         public int ThickLineRadius = 1;
 
         [Header("Sector")] public Vector2Int SectorCenter = Vector2Int.zero;
 
+        [Tooltip("Sector radius in cells. Clamped to 0..512 to bound chunk allocation.")]
         public int SectorRadius = 6;
         public float SectorFacingDegrees = 90f;
         [Range(1f, 90f)] public float SectorHalfAngleDegrees = 30f;
@@ -78,20 +109,34 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
         private void OnValidate()
         {
-            RectSize = new Vector2Int(math.max(0, RectSize.x), math.max(0, RectSize.y));
-            ShellThickness = math.max(1, ShellThickness);
-            DiscRadius = math.max(0, DiscRadius);
-            AnnulusOuterRadius = math.max(0, AnnulusOuterRadius);
+            RectSize = ClampExtent(RectSize);
+            ShellThickness = math.clamp(ShellThickness, 1, MaxExtent);
+            DiscRadius = math.clamp(DiscRadius, 0, MaxExtent);
+            AnnulusOuterRadius = math.clamp(AnnulusOuterRadius, 0, MaxExtent);
             AnnulusInnerRadius = math.clamp(AnnulusInnerRadius, -1, AnnulusOuterRadius - 1);
-            CapsuleRadius = math.max(0, CapsuleRadius);
-            EllipseRadii = new Vector2Int(math.max(0, EllipseRadii.x), math.max(0, EllipseRadii.y));
-            RoundedRectSize = new Vector2Int(math.max(0, RoundedRectSize.x), math.max(0, RoundedRectSize.y));
-            RoundedRectRadius = math.max(0, RoundedRectRadius);
-            ThickLineRadius = math.max(0, ThickLineRadius);
-            SectorRadius = math.max(0, SectorRadius);
+            CapsuleRadius = math.clamp(CapsuleRadius, 0, MaxExtent);
+            CapsuleStart = ClampCoord(CapsuleStart);
+            CapsuleEnd = ClampCoord(CapsuleEnd);
+            EllipseRadii = ClampExtent(EllipseRadii);
+            RoundedRectSize = ClampExtent(RoundedRectSize);
+            RoundedRectRadius = math.clamp(RoundedRectRadius, 0, MaxExtent);
+            ThickLineRadius = math.clamp(ThickLineRadius, 0, MaxExtent);
+            ThickLineStart = ClampCoord(ThickLineStart);
+            ThickLineEnd = ClampCoord(ThickLineEnd);
+            SectorRadius = math.clamp(SectorRadius, 0, MaxExtent);
             SectorHalfAngleDegrees = math.clamp(SectorHalfAngleDegrees, 1f, 90f);
-            PaintMin = new Vector2Int(math.clamp(PaintMin.x, -4096, 4096), math.clamp(PaintMin.y, -4096, 4096));
+            PaintMin = ClampCoord(PaintMin);
             EnsurePaintBuffer();
+        }
+
+        private static Vector2Int ClampExtent(Vector2Int v)
+        {
+            return new Vector2Int(math.clamp(v.x, 0, MaxExtent), math.clamp(v.y, 0, MaxExtent));
+        }
+
+        private static Vector2Int ClampCoord(Vector2Int v)
+        {
+            return new Vector2Int(math.clamp(v.x, -MaxCoord, MaxCoord), math.clamp(v.y, -MaxCoord, MaxCoord));
         }
 
         int IUID.ID

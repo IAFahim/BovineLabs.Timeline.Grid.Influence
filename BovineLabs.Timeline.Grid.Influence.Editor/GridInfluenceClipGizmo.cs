@@ -43,9 +43,24 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 if (transform == null)
                     continue;
 
-                GridInfluenceExpansion.Collect(clip, Shapes);
+                CollectClipShapes(clip, Shapes);
                 Draw(basis, cellSize, transform, clip, Shapes);
             }
+        }
+
+        // Matches GridInfluenceClip.Bake precedence: a Composite with a (non-Painted) Base replaces the primary
+        // Stamp, so preview its rotated/weighted layers; otherwise preview the stamp expansion.
+        private static void CollectClipShapes(GridInfluenceClip clip, List<InfluenceShape> shapes)
+        {
+            if (clip.Composite != null && clip.Composite.Base != null &&
+                clip.Composite.Base.Kind != ShapeKind.Painted)
+            {
+                GridCompositeSchemaObjectEditor.CollectLayers(clip.Composite, clip.Polarity.Sign(),
+                    clip.WeightMultiplier, clip.Rotation, shapes);
+                return;
+            }
+
+            GridInfluenceExpansion.Collect(clip, shapes);
         }
 
         private static Transform ResolveBoundTransform(PlayableDirector director, TimelineClip timelineClip)

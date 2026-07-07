@@ -6,7 +6,6 @@ using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using BovineLabs.Timeline.Grid.Influence.Data.Builders;
-using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.Timeline;
@@ -40,7 +39,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
 
         [Header("Transform")]
         [Tooltip(
-            "Scales stamp weights. On composite clips it scales the per-depth CUMULATIVE weights (rounded per layer), so inter-layer deltas can differ slightly from the single-stamp path.")]
+            "Scales stamp weights. On composite clips it scales the per-depth CUMULATIVE weights (rounded per layer), so inter-layer deltas can differ slightly from the single-stamp path. Field weights are plain integers: keep the effective |BaseWeight * WeightMultiplier| >= 8-10, as smaller weights quantize to 0 during clip blending and pop in/out.")]
         public float WeightMultiplier = 1.0f;
 
         public Vector3 LocalOffset;
@@ -62,17 +61,23 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             DependOnStamps(context);
             BindOriginTransform(context);
 
+            WarnCompositePrecedence();
+
             var compositeBlob = default(BlobAssetReference<CompositeShapeBlob>);
             if (Composite != null && Composite.Base != null)
             {
                 context.Baker.DependsOn(Composite);
-                if (TryBuildComposite(out compositeBlob))
+                if (CompositeBaking.TryBuild(Composite, Polarity.Sign(), WeightMultiplier, Rotation, this, true,
+                        out compositeBlob))
                     context.Baker.AddBlobAsset(ref compositeBlob, out _);
                 else
                     compositeBlob = default;
             }
 
             var hasComposite = compositeBlob.IsCreated;
+
+            if (!hasComposite)
+                WarnLowPrimaryWeight();
 
             var primaryShapes = new List<InfluenceShape>(1);
             if (!hasComposite)
@@ -106,47 +111,35 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
             base.Bake(clipEntity, context);
         }
 
-        private bool TryBuildComposite(out BlobAssetReference<CompositeShapeBlob> blob)
+        private void WarnCompositePrecedence()
         {
-            blob = default;
+            if (Composite == null)
+                return;
 
-            if (Composite.Base.Kind == ShapeKind.Painted)
+            if (Composite.Base == null)
             {
-                Debug.LogWarning($"GridInfluenceClip '{name}' uses a Painted stamp as its Composite base. " +
-                                 "Painted stamps have no composite form; the composite is skipped. Use a parametric base shape.",
-                    this);
-                return false;
-            }
-
-            var baseShape = Composite.Base.BuildShape(1f).WithWeight(1);
-            var weights = Composite.Profile.SampleDepthWeights(baseShape, Allocator.Temp);
-
-            var sign = Polarity.Sign();
-            var anyNonZero = false;
-            for (var i = 0; i < weights.Length; i++)
-            {
-                weights[i] = Mathf.RoundToInt(weights[i] * WeightMultiplier) * sign;
-                anyNonZero |= weights[i] != 0;
-            }
-
-            if (!anyNonZero && weights.Length > 0)
                 Debug.LogWarning(
-                    $"GridInfluenceClip '{name}' WeightMultiplier ({WeightMultiplier}) rounded every composite layer weight to 0; the composite contributes nothing. Raise WeightMultiplier or the base weights.",
+                    $"GridInfluenceClip '{name}' has a Composite with no Base shape; the composite is ignored and the clip falls back to the Stamp.",
                     this);
-
-            blob = CompositeBaker.Build(baseShape, weights, Allocator.Persistent);
-            weights.Dispose();
-
-            if (!(blob.IsCreated && blob.Value.Layers.Length > 0))
-            {
-                if (blob.IsCreated)
-                    blob.Dispose();
-
-                blob = default;
-                return false;
+                return;
             }
 
-            return true;
+            if (Stamp != null || Falloff != FalloffMode.None)
+                Debug.LogWarning(
+                    $"GridInfluenceClip '{name}' uses a Composite base: the primary Stamp is not stamped and Falloff is not applied to composite layers. (Rotation and ExtraStamps still apply.)",
+                    this);
+        }
+
+        private void WarnLowPrimaryWeight()
+        {
+            if (Stamp == null || Stamp.Kind == ShapeKind.Painted)
+                return;
+
+            var effective = Mathf.Abs(Mathf.RoundToInt(Stamp.BaseWeight * WeightMultiplier));
+            if (effective is >= 1 and <= 7)
+                Debug.LogWarning(
+                    $"GridInfluenceClip '{name}' primary stamp effective weight is {effective}; small integer weights quantize badly under clip blending (footprints pop in/out). Prefer BaseWeight >= 8-10.",
+                    this);
         }
 
         private bool HasSchemas()

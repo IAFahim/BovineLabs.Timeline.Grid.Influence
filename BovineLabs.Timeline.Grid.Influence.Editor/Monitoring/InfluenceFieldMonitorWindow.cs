@@ -11,10 +11,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
     internal sealed class InfluenceFieldMonitorWindow : EditorWindow
     {
         private const int DefaultMaxCapturedChunks = 512;
+        private const double CaptureIntervalSeconds = 0.5;
 
         private readonly List<World> _worlds = new(4);
 
         private bool _autoRefresh = true;
+        private bool _pauseCapture;
+        private double _lastCaptureTime;
         private Vector2 _cellScroll;
         private Vector2 _chunkScroll;
 
@@ -67,7 +70,10 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
 
         private void OnInspectorUpdate()
         {
-            if (!_autoRefresh)
+            if (!_autoRefresh || _pauseCapture)
+                return;
+
+            if (EditorApplication.timeSinceStartup - _lastCaptureTime < CaptureIntervalSeconds)
                 return;
 
             Refresh();
@@ -128,6 +134,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
 
                     _autoRefresh = GUILayout.Toggle(_autoRefresh, "Auto", EditorStyles.toolbarButton,
                         GUILayout.Width(55));
+
+                    _pauseCapture = GUILayout.Toggle(_pauseCapture, "Pause capture", EditorStyles.toolbarButton,
+                        GUILayout.Width(100));
 
                     if (GUILayout.Button("Refresh", GUILayout.Width(80)))
                         Refresh();
@@ -201,6 +210,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                         EditorGUILayout.LabelField(
                             $"chunk {field.Spec.ChunkSize}, frame {field.FrameId}, allocated {field.AllocatedChunks}, approx {FormatBytes(field.ApproxDataBytes)}",
                             EditorStyles.miniLabel);
+
+                        // TODO(TODO-22): surface per-field FieldFrameStats (StampsIn / StampsDropped /
+                        // ChunksActivated / ChunksEvicted) here once Agent 1 lands the runtime counters.
                     }
                 }
 
@@ -314,6 +326,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
 
         private void Refresh()
         {
+            _lastCaptureTime = EditorApplication.timeSinceStartup;
+
             RefreshWorldCache();
 
             if (_worlds.Count == 0)

@@ -122,7 +122,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
             state.RequireForUpdate<InfluenceGridSettings>();
 
             _stampQuery = SystemAPI.QueryBuilder()
-                .WithAll<TrackBinding, InfluenceClipData, ClipActive, ClipWeight>()
+                .WithAll<TrackBinding, InfluenceClipData, ClipActive, ClipWeight, InfluenceStampElement>()
                 .Build();
         }
 
@@ -325,23 +325,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 var minGrid = new float2(gridOrigin.x + minCell.x, gridOrigin.y + minCell.y) * CellSize;
                 var maxGrid = new float2(gridOrigin.x + maxCell.x, gridOrigin.y + maxCell.y) * CellSize;
 
-                var p0 = Basis.ToWorldSpace(minGrid, heightOffset);
-                var p1 = Basis.ToWorldSpace(new float2(maxGrid.x, minGrid.y), heightOffset);
-                var p2 = Basis.ToWorldSpace(maxGrid, heightOffset);
-                var p3 = Basis.ToWorldSpace(new float2(minGrid.x, maxGrid.y), heightOffset);
-
-                var min = math.min(math.min(p0, p1), math.min(p2, p3));
-                var max = math.max(math.max(p0, p1), math.max(p2, p3));
-
-                var margin = math.max(0.1f, CellSize);
-
-                var aabb = new AABB
-                {
-                    Center = (min + max) * 0.5f,
-                    Extents = (max - min) * 0.5f + new float3(margin)
-                };
-
-                return CameraCulling.AnyIntersect(aabb);
+                return GridDebugCulling.RectVisible(Basis, CameraCulling, CellSize, minGrid, maxGrid, heightOffset);
             }
 
             private static bool TryGetShapeBounds(InfluenceShape shape, out int2 minCell, out int2 maxCell)
@@ -572,28 +556,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Debug
                 if (!CullToCamera)
                     return true;
 
-                var chunkSize = Spec.ChunkSize;
-                var edge = chunkSize * CellSize;
-
-                var origin = new float2(coord.x * chunkSize, coord.y * chunkSize) * CellSize;
-
-                var p0 = Basis.ToWorldSpace(origin, RenderHeight);
-                var p1 = Basis.ToWorldSpace(origin + new float2(edge, 0f), RenderHeight);
-                var p2 = Basis.ToWorldSpace(origin + new float2(edge, edge), RenderHeight);
-                var p3 = Basis.ToWorldSpace(origin + new float2(0f, edge), RenderHeight);
-
-                var min = math.min(math.min(p0, p1), math.min(p2, p3));
-                var max = math.max(math.max(p0, p1), math.max(p2, p3));
-
-                var margin = math.max(0.1f, CellSize);
-
-                var aabb = new AABB
-                {
-                    Center = (min + max) * 0.5f,
-                    Extents = (max - min) * 0.5f + new float3(margin)
-                };
-
-                return CameraCulling.AnyIntersect(aabb);
+                return GridDebugCulling.ChunkVisible(Basis, CameraCulling, CellSize, coord, Spec.ChunkSize, RenderHeight);
             }
 
             private void DrawChunkBounds(float2 chunkOrigin, int chunkSize)

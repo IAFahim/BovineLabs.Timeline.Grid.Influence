@@ -73,21 +73,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 return false;
             }
 
-            for (var i = 0; i < registry.Count; i++)
-            {
-                ref var slotPair = ref registry.Slot(i);
-                slotPair.WriterDependency.Complete();
-                slotPair.Front.Complete();
-            }
-
-            var fields = CaptureFieldSummaries(ref registry);
-
             selectedFieldSlot = math.clamp(selectedFieldSlot, 0, registry.Count - 1);
 
             ref var pair = ref registry.Slot(selectedFieldSlot);
 
             pair.WriterDependency.Complete();
             pair.Front.Complete();
+
+            var fields = CaptureFieldSummaries(ref registry, selectedFieldSlot);
 
             var field = pair.Front;
 
@@ -132,7 +125,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             return true;
         }
 
-        private static FieldSummary[] CaptureFieldSummaries(ref FieldRegistry registry)
+        private static FieldSummary[] CaptureFieldSummaries(ref FieldRegistry registry, int selectedFieldSlot)
         {
             var summaries = new FieldSummary[registry.Count];
 
@@ -140,6 +133,25 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             {
                 ref var pair = ref registry.Slot(i);
                 var field = pair.Front;
+
+                var ready = i == selectedFieldSlot || !field.IsCreated || field.Dependency.IsCompleted;
+
+                if (!ready)
+                {
+                    summaries[i] = new FieldSummary(
+                        i,
+                        pair.Config.Key,
+                        pair.Config.Name.ToString(),
+                        field.Spec,
+                        pair.DoubleBuffered,
+                        field.FrameId,
+                        0,
+                        0,
+                        0,
+                        true);
+                    continue;
+                }
+
                 var spec = field.IsCreated ? field.Spec : default;
 
                 var allocatedChunks =
@@ -161,7 +173,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                     field.IsCreated ? field.FrameId : 0,
                     field.IsCreated ? field.ActiveSlotCount : 0,
                     allocatedChunks,
-                    approxBytes);
+                    approxBytes,
+                    false);
             }
 
             return summaries;
@@ -310,6 +323,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             public readonly int ActiveChunks;
             public readonly int AllocatedChunks;
             public readonly long ApproxDataBytes;
+            public readonly bool Pending;
 
             public FieldSummary(
                 int slot,
@@ -320,7 +334,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 uint frameId,
                 int activeChunks,
                 int allocatedChunks,
-                long approxDataBytes)
+                long approxDataBytes,
+                bool pending)
             {
                 Slot = slot;
                 Key = key;
@@ -331,12 +346,19 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 ActiveChunks = activeChunks;
                 AllocatedChunks = allocatedChunks;
                 ApproxDataBytes = approxDataBytes;
+                Pending = pending;
             }
 
-            public string DisplayName =>
-                string.IsNullOrWhiteSpace(Name)
-                    ? $"#{Slot} / Key {Key}"
-                    : $"{Name}  —  Key {Key}";
+            public string DisplayName
+            {
+                get
+                {
+                    var name = string.IsNullOrWhiteSpace(Name)
+                        ? $"#{Slot} / Key {Key}"
+                        : $"{Name}  —  Key {Key}";
+                    return Pending ? $"{name}  (pending)" : name;
+                }
+            }
         }
 
         public readonly struct ChunkSnapshot

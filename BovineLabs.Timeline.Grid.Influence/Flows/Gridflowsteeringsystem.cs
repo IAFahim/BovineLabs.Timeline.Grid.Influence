@@ -7,7 +7,6 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Transforms;
-using UnityEngine;
 
 namespace BovineLabs.Timeline.Grid.Influence
 {
@@ -20,7 +19,7 @@ namespace BovineLabs.Timeline.Grid.Influence
         private ComponentLookup<LocalTransform> _transformLookup;
 
         // Field keys we've already warned are unregistered, so the diagnostic fires once per key, not every frame.
-        private NativeHashSet<ushort> _warnedMissing;
+        private MissingFieldKeyWarnings _warnings;
 
         public void OnCreate(ref SystemState state)
         {
@@ -28,13 +27,12 @@ namespace BovineLabs.Timeline.Grid.Influence
             state.RequireForUpdate<FieldRegistrySingleton>();
 
             _transformLookup = state.GetComponentLookup<LocalTransform>();
-            _warnedMissing = new NativeHashSet<ushort>(8, Allocator.Persistent);
+            _warnings = MissingFieldKeyWarnings.Create();
         }
 
         public void OnDestroy(ref SystemState state)
         {
-            if (_warnedMissing.IsCreated)
-                _warnedMissing.Dispose();
+            _warnings.Dispose();
         }
 
         public void OnUpdate(ref SystemState state)
@@ -57,32 +55,19 @@ namespace BovineLabs.Timeline.Grid.Influence
             if (activeKeys.IsEmpty)
                 return;
 
-            // Diagnose steering clips pointing at an unregistered field key — otherwise a silent no-op (the clip
-            // never moves the agent and there is no field to steer by). Warned once per key.
+            // TODO-07: warn once per unregistered field key — otherwise a silent no-op (the clip never moves the
+            // agent and there is no field to steer by).
             foreach (var key in activeKeys)
-            {
-                if (_warnedMissing.Contains(key))
-                    continue;
+                _warnings.Report(key, reg.KeyToSlot, "GridFlowSteering");
 
-                var registered = false;
-                for (var i = 0; i < reg.Count; i++)
-                {
-                    if (reg.Slot(i).Config.Key == key)
-                    {
-                        registered = true;
-                        break;
-                    }
-                }
+            // TODO-17(c): resolve each active field's flow (the per-field Resolve chain must stay), then run ONE
+            // SteerJob that resolves the field per entity via KeyToSlot instead of scheduling a full-query SteerJob
+            // per field.
+            var readersBySlot = CollectionHelper.CreateNativeArray<FlowReader>(reg.Count, state.WorldUpdateAllocator);
+            var validBySlot = CollectionHelper.CreateNativeArray<byte>(reg.Count, state.WorldUpdateAllocator);
 
-                if (!registered)
-                {
-                    _warnedMissing.Add(key);
-                    Debug.LogWarning($"GridFlowSteering: a steering clip references field key {key}, which is not " +
-                        "registered; the clip will do nothing until an InfluenceField with that key exists in the world.");
-                }
-            }
-
-            var dependency = state.Dependency;
+            var resolved = state.Dependency;
+            var anyValid = false;
             for (var i = 0; i < reg.Count; i++)
             {
                 ref var pair = ref reg.Slot(i);
@@ -97,36 +82,59 @@ namespace BovineLabs.Timeline.Grid.Influence
                 if (!flow.IsCreated)
                     flow = FlowField.Create(Allocator.Persistent);
 
-                var combined = JobHandle.CombineDependencies(dependency, field.Dependency, pair.WriterDependency);
-
+                var combined = JobHandle.CombineDependencies(state.Dependency, field.Dependency, pair.WriterDependency);
                 var handle = flow.Resolve(ref field, combined);
 
-                handle = new SteerJob
-                {
-                    Flow = flow.AsDeferredReader(ref field),
-                    FieldKey = pair.Config.Key,
-                    CellSize = cellSize,
-                    Basis = basis,
-                    DeltaTime = deltaTime,
-                    TransformLookup = _transformLookup
-                }.Schedule(handle);
+                readersBySlot[i] = flow.AsDeferredReader(ref field);
+                validBySlot[i] = 1;
+                anyValid = true;
 
-                field.PublishDependency(handle);
-                flow.PublishDependency(handle);
                 pair.Flow = flow;
                 pair.Front = field;
-                dependency = handle;
+                resolved = JobHandle.CombineDependencies(resolved, handle);
             }
 
-            state.Dependency = dependency;
+            if (!anyValid)
+                return;
+
+            var steer = new SteerJob
+            {
+                ReadersBySlot = readersBySlot,
+                ValidBySlot = validBySlot,
+                KeyToSlot = reg.KeyToSlot,
+                CellSize = cellSize,
+                Basis = basis,
+                DeltaTime = deltaTime,
+                TransformLookup = _transformLookup,
+            }.Schedule(resolved);
+
+            // Publish the single SteerJob into every involved field AND flow so the next writer waits on it.
+            for (var i = 0; i < reg.Count; i++)
+            {
+                if (validBySlot[i] == 0)
+                    continue;
+
+                ref var pair = ref reg.Slot(i);
+
+                var field = pair.Front;
+                field.PublishDependency(steer);
+                pair.Front = field;
+
+                var flow = pair.Flow;
+                flow.PublishDependency(steer);
+                pair.Flow = flow;
+            }
+
+            state.Dependency = steer;
         }
 
         [BurstCompile]
         [WithAll(typeof(ClipActive))]
         private partial struct SteerJob : IJobEntity
         {
-            public FlowReader Flow;
-            public ushort FieldKey;
+            [ReadOnly] public NativeArray<FlowReader> ReadersBySlot;
+            [ReadOnly] public NativeArray<byte> ValidBySlot;
+            [ReadOnly] public NativeHashMap<ushort, int> KeyToSlot;
             public float CellSize;
             public GridBasis Basis;
             public float DeltaTime;
@@ -134,18 +142,20 @@ namespace BovineLabs.Timeline.Grid.Influence
 
             private void Execute(in GridFlowSteeringData data, in TrackBinding binding, in ClipWeight weight)
             {
-                if (data.FieldKey != FieldKey)
+                if (!KeyToSlot.TryGetValue(data.FieldKey, out var slot) || ValidBySlot[slot] == 0)
                     return;
 
                 var target = binding.Value;
                 if (target == Entity.Null || !TransformLookup.HasComponent(target))
                     return;
 
+                var flow = ReadersBySlot[slot];
+
                 var transform = TransformLookup[target];
                 var cellSpace = Basis.CellSpace(transform.Position, transform.Rotation, data.LocalOffset, CellSize);
                 var cell = GridBasis.Cell(cellSpace);
 
-                var gradient = data.Bias.Sign() * Flow.Sample(cell);
+                var gradient = data.Bias.Sign() * flow.Sample(cell);
                 var planar = FieldGradient.Normalized(gradient);
                 if (math.all(planar == float2.zero))
                     return;

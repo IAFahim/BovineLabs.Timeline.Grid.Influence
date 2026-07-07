@@ -2,6 +2,7 @@ using System;
 using BovineLabs.Core.Authoring.Settings;
 using BovineLabs.Core.Settings;
 using BovineLabs.Timeline.Grid.Influence.Data;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -41,10 +42,16 @@ namespace BovineLabs.Timeline.Grid.Influence.Authoring
                 if (field == null) continue;
                 baker.DependsOn(field);
 
+                var name = default(FixedString64Bytes);
+                if (name.CopyFromTruncated(field.FieldName ?? string.Empty) == CopyError.Truncation)
+                    Debug.LogWarning(
+                        $"InfluenceGridSettingsAuthoring: field name '{field.FieldName}' exceeds the 61-byte FixedString64Bytes limit and was truncated.",
+                        field);
+
                 buffer.Add(new GridFieldConfigData
                 {
                     Key = field.Id,
-                    Name = field.FieldName,
+                    Name = name,
                     ChunkPower = math.clamp(field.ChunkPower, 1, 8),
                     RetentionFrames = field.RetentionFrames,
                     DoubleBuffered = field.DoubleBuffered,

@@ -24,12 +24,23 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
 
         public static int CollectLayers(GridCompositeSchemaObject schema, List<InfluenceShape> into)
         {
+            return CollectLayers(schema, 1, 1f, Quarter.R0, into);
+        }
+
+        // Mirrors CompositeBaking.TryBuild so previews match the baked footprint: rotate the base, sample depth
+        // weights, apply sign * weightMultiplier per layer, then inset.
+        public static int CollectLayers(GridCompositeSchemaObject schema, int sign, float weightMultiplier,
+            Quarter rotation, List<InfluenceShape> into)
+        {
             into.Clear();
-            if (schema == null || schema.Base == null)
+            if (schema == null || schema.Base == null || schema.Base.Kind == ShapeKind.Painted)
                 return 0;
 
-            var baseShape = schema.Base.BuildShape(1f).WithWeight(1);
+            var baseShape = schema.Base.BuildShape(1f).WithWeight(1).Rotated(rotation);
             var weights = schema.Profile.SampleDepthWeights(baseShape, Allocator.Temp);
+            for (var i = 0; i < weights.Length; i++)
+                weights[i] = Mathf.RoundToInt(weights[i] * weightMultiplier) * sign;
+
             var count = CompositeBaker.LayerCount(baseShape, weights);
             var layers = new NativeArray<InfluenceShape>(math.max(1, count), Allocator.Temp);
             CompositeBaker.Fill(baseShape, weights, layers, true);

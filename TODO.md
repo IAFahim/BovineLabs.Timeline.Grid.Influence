@@ -326,3 +326,16 @@ for (int i = 0; i < reg.Count; i++)
 30. TODO-31 Reset-job empty gate — Low
 31. TODO-32 FieldName FixedString clamp — Low
 32. TODO-28 Showcase builder robustness/material leak — Low
+
+---
+
+## Implementation status (agent pass, 2026-07-07)
+
+All 32 items dispatched to 4 parallel agents (1: kernel/pipeline, 2: consumers/debug, 3: authoring/editor, 4: tests/monitor/docs) + orchestrator integration pass.
+
+- **DONE:** TODO-01..27, TODO-29..32 — implemented as specified (see git history).
+- **TODO-28 (Sample~ builders):** not implemented — out of all agents' ownership; one stale caption string fixed in the integration pass (`TryBakeBlob` → `CompositeBaking.TryBuild`).
+- **TODO-23(c) casing renames:** deliberately skipped (GUID/meta churn); remaining lowercase files listed in Agent 3's report.
+- Integration pass additions: TODO-22 counters wired into the monitor window (`FieldSummary.Stats`), README names `influencefield.tick-interval`, cross-agent consistency sweep clean (no refs to removed `PendingStencil`/`TryBakeBlob`/`ContentHash`/steering `_warnedMissing`).
+- Noted residuals: TODO-17(b) theoretical same-count capacity edge (flagged in code), monitor stats read is best-effort under `Dependency.IsCompleted` gate.
+- Unity editor was not run; verification was by call-site analysis. Run the test assembly (`BovineLabs.Timeline.Grid.Influence.Tests`) before shipping.

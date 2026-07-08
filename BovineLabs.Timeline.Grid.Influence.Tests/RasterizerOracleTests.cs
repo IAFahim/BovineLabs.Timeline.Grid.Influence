@@ -73,6 +73,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         [Test]
         public void FuzzedScenesMatchOracleAcrossAllChunkSizes()
         {
+            var maxPower = ChunkPowers[ChunkPowers.Length - 1];
+
             for (var seed = 1; seed <= 300; seed++)
             {
                 var rng = new Random((uint)((seed * 2654435761u) | 1u));
@@ -80,24 +82,33 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                 var stamps = new Stamp[stampCount];
                 for (var i = 0; i < stampCount; i++) stamps[i] = InfluenceTestHarness.RandomStamp(ref rng);
 
+                // The largest-pad box strictly contains every smaller-power box (same
+                // stamp bounds, larger symmetric pad), so the oracle is computed once
+                // per scene and sliced per power instead of recomputed 4x.
+                var (oracleMin, oracleSize) = InfluenceTestHarness.PaddedBox(stamps,
+                    GridSpec.FromPowerOfTwo(maxPower, uint.MaxValue), 2);
+                var oracle = InfluenceTestHarness.Oracle(stamps, oracleMin, oracleSize);
+
                 int[,] reference = null;
+                var refMin = int2.zero;
+                var refSize = int2.zero;
+
                 foreach (var power in ChunkPowers)
                 {
                     var spec = GridSpec.FromPowerOfTwo(power, uint.MaxValue);
                     var (min, size) = InfluenceTestHarness.PaddedBox(stamps, spec, 2);
-                    var oracle = InfluenceTestHarness.Oracle(stamps, min, size);
                     var field = InfluenceTestHarness.Run(spec, stamps, min, size);
 
-                    AssertMatch(field, oracle, min, size, seed, power);
+                    AssertMatch(field, oracle, oracleMin, min, size, seed, power);
 
                     if (power == ChunkPowers[0])
                     {
                         reference = field;
+                        refMin = min;
+                        refSize = size;
                     }
                     else
                     {
-                        var (refMin, refSize) = InfluenceTestHarness.PaddedBox(stamps,
-                            GridSpec.FromPowerOfTwo(ChunkPowers[0], uint.MaxValue), 2);
                         AssertChunkInvariance(reference, refMin, refSize, field, min, size, seed, power);
                     }
                 }
@@ -158,16 +169,22 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             }
         }
 
-        private static void AssertMatch(int[,] field, long[,] oracle, int2 min, int2 size, int seed, int power)
+        private static void AssertMatch(int[,] field, long[,] oracle, int2 oracleMin, int2 min, int2 size, int seed,
+            int power)
         {
+            // Hot loop: NUnit constraints and interpolated messages are only built on
+            // failure. Eager per-cell Assert calls previously dominated the fuzz test
+            // (~40M constraint evaluations) and blew the 180s timeout.
+            var off = min - oracleMin;
             for (var x = 0; x < size.x; x++)
             for (var y = 0; y < size.y; y++)
             {
-                var expected = oracle[x, y];
-                Assert.That(expected, Is.InRange((long)int.MinValue, (long)int.MaxValue),
-                    $"Oracle exceeded int range seed {seed} power {power} cell ({min.x + x},{min.y + y})");
-                Assert.AreEqual((int)expected, field[x, y],
-                    $"Mismatch seed {seed} power {power} cell ({min.x + x},{min.y + y})");
+                var expected = oracle[off.x + x, off.y + y];
+                if (expected < int.MinValue || expected > int.MaxValue)
+                    Assert.Fail($"Oracle exceeded int range seed {seed} power {power} cell ({min.x + x},{min.y + y})");
+                if (field[x, y] != (int)expected)
+                    Assert.AreEqual((int)expected, field[x, y],
+                        $"Mismatch seed {seed} power {power} cell ({min.x + x},{min.y + y})");
             }
         }
 
@@ -178,8 +195,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             var hi = math.min(aMin + aSize, bMin + bSize);
             for (var cx = lo.x; cx < hi.x; cx++)
             for (var cy = lo.y; cy < hi.y; cy++)
-                Assert.AreEqual(a[cx - aMin.x, cy - aMin.y], b[cx - bMin.x, cy - bMin.y],
-                    $"Chunk-size divergence seed {seed} power {power} cell ({cx},{cy})");
+            {
+                if (a[cx - aMin.x, cy - aMin.y] != b[cx - bMin.x, cy - bMin.y])
+                    Assert.AreEqual(a[cx - aMin.x, cy - aMin.y], b[cx - bMin.x, cy - bMin.y],
+                        $"Chunk-size divergence seed {seed} power {power} cell ({cx},{cy})");
+            }
         }
 
         private static void AssertExactNonZeroSet(Stamp stamp, int2[] expectedNonZero)
@@ -204,7 +224,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             var spec = GridSpec.FromPowerOfTwo(3, uint.MaxValue);
             var (min, size) = InfluenceTestHarness.PaddedBox(stamps, spec, 2);
             AssertMatch(InfluenceTestHarness.Run(spec, stamps, min, size),
-                InfluenceTestHarness.Oracle(stamps, min, size), min, size, 0, 3);
+                InfluenceTestHarness.Oracle(stamps, min, size), min, min, size, 0, 3);
         }
     }
 }

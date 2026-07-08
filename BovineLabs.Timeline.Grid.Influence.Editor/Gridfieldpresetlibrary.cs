@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using BovineLabs.Timeline.Grid.Influence.Authoring;
 using BovineLabs.Timeline.Grid.Influence.Data;
@@ -43,6 +44,32 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
+
+            // Reload to pick up AutoRef/IUID id assignments before registering into settings.
+            var fields = new List<GridFieldSchemaObject>();
+            foreach (var preset in FieldPresets)
+                fields.Add(AssetDatabase.LoadAssetAtPath<GridFieldSchemaObject>($"{FieldFolder}/{preset.Name}.asset"));
+
+            var stamps = new List<GridStampSchemaObject>();
+            foreach (var preset in StampPresets)
+                stamps.Add(AssetDatabase.LoadAssetAtPath<GridStampSchemaObject>($"{StampFolder}/{preset.Name}.asset"));
+
+            var settings = GridInfluenceValidation.FindFirstSettings();
+            if (settings == null)
+            {
+                Debug.LogWarning(
+                    "Grid preset library: created presets but found no InfluenceGridSettingsAuthoring asset to register them into. Create one (BovineLabs/Grid settings) and re-run, or the new fields will silently no-op.");
+                return;
+            }
+
+            settings.Fields = MergeFields(settings.Fields, fields);
+            settings.Stamps = MergeStamps(settings.Stamps, stamps);
+            EditorUtility.SetDirty(settings);
+            AssetDatabase.SaveAssets();
+
+            var issues = new List<GridInfluenceValidation.Issue>();
+            GridInfluenceValidation.Validate(settings, issues);
+            GridInfluenceValidation.Report(issues, "Grid preset library validation");
         }
 
         private static void CreateField(in FieldPreset preset)
@@ -74,6 +101,34 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             asset.AnnulusOuterRadius = preset.OuterRadius;
             asset.AnnulusInnerRadius = preset.InnerRadius;
             AssetDatabase.CreateAsset(asset, path);
+        }
+
+        private static GridFieldSchemaObject[] MergeFields(GridFieldSchemaObject[] existing,
+            List<GridFieldSchemaObject> add)
+        {
+            var list = new List<GridFieldSchemaObject>();
+            if (existing != null)
+                foreach (var e in existing)
+                    if (e != null && !list.Contains(e))
+                        list.Add(e);
+            foreach (var a in add)
+                if (a != null && !list.Contains(a))
+                    list.Add(a);
+            return list.ToArray();
+        }
+
+        private static GridStampSchemaObject[] MergeStamps(GridStampSchemaObject[] existing,
+            List<GridStampSchemaObject> add)
+        {
+            var list = new List<GridStampSchemaObject>();
+            if (existing != null)
+                foreach (var e in existing)
+                    if (e != null && !list.Contains(e))
+                        list.Add(e);
+            foreach (var a in add)
+                if (a != null && !list.Contains(a))
+                    list.Add(a);
+            return list.ToArray();
         }
 
         private static void EnsureFolder(string path)

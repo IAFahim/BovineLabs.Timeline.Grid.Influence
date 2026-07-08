@@ -238,7 +238,7 @@ public static class GridInfluenceShowcaseBuilder
 
         // Row 1 — Subtractive mound (inverted crater).
         CompositeCell(1, "Composite Mound (Subtractive)",
-            "Same Mound composite, Polarity=Subtractive: every baked layer weight is negated, carving an inverted crater into the Objective field. Proves composite polarity sign is applied per-layer at bake (GridCompositeClip.TryBakeBlob).",
+            "Same Mound composite, Polarity=Subtractive: every baked layer weight is negated, carving an inverted crater into the Objective field. Proves composite polarity sign is applied per-layer at bake (CompositeBaking.TryBuild).",
             Polarity.Subtractive);
     }
 

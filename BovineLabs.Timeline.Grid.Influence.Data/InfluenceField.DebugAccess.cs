@@ -18,6 +18,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         internal NativeList<int> FreeSlotsList => _freeSlots;
         internal int ActiveChunkCount => _activeSlots.Length;
 
+        internal FieldFrameStats LastStats => _stats.IsCreated ? _stats.Value : default;
+
         internal FieldReader AsDeferredReader()
         {
             return new FieldReader(

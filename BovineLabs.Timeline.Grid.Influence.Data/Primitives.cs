@@ -69,17 +69,23 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             return DecayKeep(value, decayPerMille) / (spreadDenominator < 1 ? 1 : spreadDenominator);
         }
 
+        /// <summary>Largest r >= 0 such that r * r &lt;= value, exact over the full long domain.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int FloorSqrt(long value)
+        public static long FloorSqrt(long value)
         {
             if (value <= 0) return 0;
 
-            var root = (long)math.sqrt((double)value);
-            while ((root + 1) * (root + 1) <= value) root++;
+            const ulong maxRoot = 3037000499ul; // floor(sqrt(long.MaxValue))
 
-            while (root * root > value) root--;
+            var v = (ulong)value;
+            var root = (ulong)math.sqrt((double)value);
+            if (root > maxRoot) root = maxRoot;
 
-            return root > int.MaxValue ? int.MaxValue : (int)root;
+            while (root * root > v) root--;
+
+            while (root < maxRoot && (root + 1) * (root + 1) <= v) root++;
+
+            return (long)root;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -108,6 +108,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             Assert.AreEqual(1u, field.FrameId, "wraparound did not reset frame");
             Assert.AreEqual(0, field.AsReader().ReadCell(new int2(0, 0)), "stale chunk leaked across wraparound");
             Assert.AreEqual(3, field.AsReader().ReadCell(new int2(1000, 1000)));
+            Assert.AreEqual(1, field.CoordBySlotList.Length,
+                "wraparound reset did not reclaim the stale slot for reuse");
 
             first.Dispose();
             second.Dispose();

@@ -86,9 +86,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             foreach (var value in grid)
                 peak = math.max(peak, math.abs(value));
 
+            // TODO-25 orientation: grid/paint row index y maps to world cell min.y + y (see BuildPainted), so row 0
+            // is the LOWEST world y. GUI.DrawTexture draws texel row 0 at the BOTTOM of the rect (no flip), so we
+            // copy data row y -> texel row y: world +y then renders UP, matching the scene gizmo (+y up). The
+            // previous `size.y - 1 - y` inverted this, showing the canvas upside-down relative to the world. Input
+            // (HandlePaint) is flipped to match; stored data is never reinterpreted.
             for (var y = 0; y < size.y; y++)
             for (var x = 0; x < size.x; x++)
-                preview.SetPixel(x, size.y - 1 - y, WeightColor(grid[x + y * size.x], peak));
+                preview.SetPixel(x, y, WeightColor(grid[x + y * size.x], peak));
 
             preview.Apply();
         }
@@ -155,9 +160,11 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             foreach (var value in weights)
                 peak = math.max(peak, math.abs(value));
 
+            // TODO-25 orientation: same convention as BuildTexture — data row y (world +y) -> texel row y so the
+            // canvas renders world +y up, matching the scene gizmo.
             for (var y = 0; y < sy; y++)
             for (var x = 0; x < sx; x++)
-                preview.SetPixel(x, sy - 1 - y, WeightColor(weights[x + y * sx], peak));
+                preview.SetPixel(x, y, WeightColor(weights[x + y * sx], peak));
 
             preview.Apply();
         }
@@ -175,7 +182,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             var local = e.mousePosition - rect.position;
             var cx = (int)(local.x / cellPixels);
 
-            var cy = (int)(local.y / cellPixels);
+            // TODO-25 orientation: the canvas renders world +y up (row sy-1 at the top of the rect), so invert the
+            // top-down mouse row back to the data row it points at, keeping paint WYSIWYG.
+            var cy = sy - 1 - (int)(local.y / cellPixels);
             if (cx < 0 || cx >= sx || cy < 0 || cy >= sy)
                 return;
 

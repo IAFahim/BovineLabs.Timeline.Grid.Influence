@@ -94,8 +94,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
         {
             long r = IntegerMath.FloorSqrt(v);
             Assert.GreaterOrEqual(r, 0);
-            Assert.LessOrEqual((BigInteger)r * r, v, $"floor too high for {v}");
-            Assert.Greater((BigInteger)(r + 1) * (r + 1), v, $"floor too low for {v}");
+            Assert.LessOrEqual((BigInteger)r * r, (BigInteger)v, $"floor too high for {v}");
+            Assert.Greater((BigInteger)(r + 1) * (r + 1), (BigInteger)v, $"floor too low for {v}");
         }
     }
 }

@@ -148,6 +148,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                         0,
                         0,
                         0,
+                        default,
                         true);
                     continue;
                 }
@@ -174,6 +175,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                     field.IsCreated ? field.ActiveSlotCount : 0,
                     allocatedChunks,
                     approxBytes,
+                    field.IsCreated ? field.LastStats : default,
                     false);
             }
 
@@ -323,6 +325,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
             public readonly int ActiveChunks;
             public readonly int AllocatedChunks;
             public readonly long ApproxDataBytes;
+            public readonly FieldFrameStats Stats;
             public readonly bool Pending;
 
             public FieldSummary(
@@ -335,6 +338,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 int activeChunks,
                 int allocatedChunks,
                 long approxDataBytes,
+                FieldFrameStats stats,
                 bool pending)
             {
                 Slot = slot;
@@ -346,6 +350,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                 ActiveChunks = activeChunks;
                 AllocatedChunks = allocatedChunks;
                 ApproxDataBytes = approxDataBytes;
+                Stats = stats;
                 Pending = pending;
             }
 

@@ -1,3 +1,4 @@
+using BovineLabs.Core.ConfigVars;
 using BovineLabs.Timeline.Grid.Influence.Data;
 using Unity.Burst;
 using Unity.Collections;
@@ -7,6 +8,8 @@ using UnityEngine;
 
 namespace BovineLabs.Timeline.Grid.Influence.Fields
 {
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation |
+                       WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.Editor)]
     [UpdateInGroup(typeof(InitializationSystemGroup))]
     public partial struct FieldBootstrapSystem : ISystem
     {
@@ -66,9 +69,27 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
         }
     }
 
+    [Configurable]
+    public static class FieldTickConfig
+    {
+        // 0 = tick every rendered frame (default, matches historical behaviour). When > 0 the tick pump
+        // accumulates DeltaTime and runs 0..2 field ticks per frame so decay/spread/retention are measured
+        // in wall-clock time instead of frames (TODO-03). Catch-up is clamped to 2 sub-steps per frame.
+        [ConfigVar("influencefield.tick-interval", 0f, "Fixed influence-field tick interval in seconds. 0 = tick every frame.")]
+        public static readonly SharedStatic<float> TickInterval = SharedStatic<float>.GetOrCreate<TickIntervalTag>();
+
+        private struct TickIntervalTag
+        {
+        }
+    }
+
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation |
+                       WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.Editor)]
     [UpdateInGroup(typeof(SimulationSystemGroup), OrderLast = true)]
     public partial struct FieldTickSystem : ISystem
     {
+        private double _accumulator;
+
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<FieldRegistrySingleton>();
@@ -80,43 +101,116 @@ namespace BovineLabs.Timeline.Grid.Influence.Fields
             ref var reg = ref singleton.Registry;
             var stampsMap = singleton.PendingStamps;
 
+            WarnOnceOnDrops(ref reg);
+
+            var subSteps = ResolveSubSteps(FieldTickConfig.TickInterval.Data, SystemAPI.Time.DeltaTime);
+
+            if (subSteps == 0)
+            {
+                // GridInfluenceApplySystem re-adds this frame's stamps every rendered frame. When no sub-step
+                // consumes them we still clear the map so the next frame starts from a fresh set rather than
+                // doubling this frame's stamps into the next tick.
+                state.Dependency = new ClearMapJob { Map = stampsMap }.Schedule(state.Dependency);
+                return;
+            }
+
             var combinedWriters = state.Dependency;
             for (var i = 0; i < reg.Count; i++)
                 combinedWriters = JobHandle.CombineDependencies(combinedWriters, reg.Slot(i).WriterDependency);
 
             JobHandle combined = default;
-            for (var i = 0; i < reg.Count; i++)
+            for (var step = 0; step < subSteps; step++)
             {
-                ref var pair = ref reg.Slot(i);
+                var consumeStamps = step == 0;
+                for (var i = 0; i < reg.Count; i++)
+                {
+                    ref var pair = ref reg.Slot(i);
+                    pair.Tick++;
 
-                if (pair.DoubleBuffered && pair.Config.DecayPerMille > 0)
-                    pair.PendingStencil = new InfluenceField.StencilConfig
-                    {
-                        IsActive = true,
-                        ActiveSlots = pair.Front.ActiveSlotsDeferred,
-                        CoordBySlot = pair.Front.CoordBySlotDeferred,
-                        Data = pair.Front.DataDeferred,
-                        NonZeroBySlot = pair.Front.NonZeroBySlotDeferred,
-                        SlotByCoord = pair.Front.SlotByCoordReadOnly,
-                        DecayPerMille = pair.Config.DecayPerMille,
-                        SpreadDenominator = pair.Config.SpreadDenominator
-                    };
+                    var stencil = default(InfluenceField.StencilConfig);
+                    if (pair.DoubleBuffered && pair.Config.DecayPerMille > 0)
+                        stencil = new InfluenceField.StencilConfig
+                        {
+                            IsActive = true,
+                            ActiveSlots = pair.Front.ActiveSlotsDeferred,
+                            CoordBySlot = pair.Front.CoordBySlotDeferred,
+                            Data = pair.Front.DataDeferred,
+                            NonZeroBySlot = pair.Front.NonZeroBySlotDeferred,
+                            SlotByCoord = pair.Front.SlotByCoordReadOnly,
+                            LastWrittenBySlot = pair.Front.LastWrittenBySlotDeferred,
+                            FrameId = pair.Front.FrameId,
+                            DecayPerMille = pair.Config.DecayPerMille,
+                            SpreadDenominator = pair.Config.SpreadDenominator
+                        };
 
-                JobHandle h;
-                if (pair.DoubleBuffered)
-                    h = pair.Back.Schedule(stampsMap.AsReadOnly(), i, combinedWriters, pair.PendingStencil);
-                else
-                    h = pair.Front.Schedule(stampsMap.AsReadOnly(), i, combinedWriters, pair.PendingStencil);
+                    JobHandle h;
+                    if (pair.DoubleBuffered)
+                        h = consumeStamps
+                            ? pair.Back.Schedule(stampsMap.AsReadOnly(), i, pair.Tick, combinedWriters, stencil)
+                            : pair.Back.Schedule(default(NativeArray<Stamp>), pair.Tick, combinedWriters, stencil);
+                    else
+                        h = consumeStamps
+                            ? pair.Front.Schedule(stampsMap.AsReadOnly(), i, pair.Tick, combinedWriters, stencil)
+                            : pair.Front.Schedule(default(NativeArray<Stamp>), pair.Tick, combinedWriters, stencil);
 
-                pair.Swap();
+                    pair.Swap();
+                    pair.WriterDependency = default;
 
-                pair.PendingStencil = default;
-                pair.WriterDependency = default;
+                    combined = JobHandle.CombineDependencies(combined, h);
+                }
 
-                combined = JobHandle.CombineDependencies(combined, h);
+                combinedWriters = combined;
             }
 
             state.Dependency = new ClearMapJob { Map = stampsMap }.Schedule(combined);
+        }
+
+        private int ResolveSubSteps(float interval, float deltaTime)
+        {
+            if (interval <= 0f)
+            {
+                _accumulator = 0d;
+                return 1;
+            }
+
+            _accumulator += deltaTime;
+
+            var subSteps = 0;
+            while (_accumulator >= interval && subSteps < 2)
+            {
+                _accumulator -= interval;
+                subSteps++;
+            }
+
+            if (_accumulator > interval)
+                _accumulator = interval;
+
+            return subSteps;
+        }
+
+        private static void WarnOnceOnDrops(ref FieldRegistry reg)
+        {
+#if UNITY_EDITOR || BL_DEBUG
+            for (var i = 0; i < reg.Count; i++)
+            {
+                ref var pair = ref reg.Slot(i);
+                if (pair.DropWarned != 0) continue;
+
+                var field = pair.Front;
+                if (!field.IsCreated || !field.Dependency.IsCompleted) continue;
+
+                field.Complete();
+                var stats = field.LastStats;
+                var dropped = stats.StampsDroppedSpanBudget + stats.StampsDroppedChunkBudget;
+                if (dropped <= 0) continue;
+
+                pair.DropWarned = 1;
+                Debug.LogWarning(
+                    $"[GridInfluence] Field '{pair.Config.Name}' (key {pair.Config.Key}) dropped {dropped} stamp(s) last tick " +
+                    $"(span-budget {stats.StampsDroppedSpanBudget}, chunk-budget {stats.StampsDroppedChunkBudget}). " +
+                    "Reduce stamp radius/size/count or raise the budget.");
+            }
+#endif
         }
 
         [BurstCompile]

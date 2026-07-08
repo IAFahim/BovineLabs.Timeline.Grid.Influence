@@ -52,6 +52,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
                 Data = source.DataDeferred,
                 NonZeroBySlot = source.NonZeroBySlotDeferred,
                 SlotByCoord = source.SlotByCoordReadOnly,
+                LastWrittenBySlot = source.LastWrittenBySlotDeferred,
+                FrameId = source.FrameId,
                 DecayPerMille = decay,
                 SpreadDenominator = spreadDenom
             };

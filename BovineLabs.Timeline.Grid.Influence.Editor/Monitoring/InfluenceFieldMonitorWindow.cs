@@ -211,8 +211,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                             $"chunk {field.Spec.ChunkSize}, frame {field.FrameId}, allocated {field.AllocatedChunks}, approx {FormatBytes(field.ApproxDataBytes)}",
                             EditorStyles.miniLabel);
 
-                        // TODO(TODO-22): surface per-field FieldFrameStats (StampsIn / StampsDropped /
-                        // ChunksActivated / ChunksEvicted) here once Agent 1 lands the runtime counters.
+                        if (!field.Pending)
+                        {
+                            var stats = field.Stats;
+                            var dropped = stats.StampsDroppedSpanBudget + stats.StampsDroppedChunkBudget;
+                            var statsLine = dropped > 0
+                                ? $"stamps {stats.StampsIn} (dropped {dropped}: span {stats.StampsDroppedSpanBudget}, chunk {stats.StampsDroppedChunkBudget}), chunks +{stats.ChunksActivated}/-{stats.ChunksEvicted}"
+                                : $"stamps {stats.StampsIn}, chunks +{stats.ChunksActivated}/-{stats.ChunksEvicted}";
+                            EditorGUILayout.LabelField(statsLine, EditorStyles.miniLabel);
+                        }
                     }
                 }
 

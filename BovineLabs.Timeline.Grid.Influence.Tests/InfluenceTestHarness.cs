@@ -184,6 +184,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
 
             if (radii.y == 0) return dy == 0 && math.abs(dx) <= radii.x;
 
+            if (FitsFastPath(center, cell, 0, radii))
+            {
+                var rx2L = (long)radii.x * radii.x;
+                var ry2L = (long)radii.y * radii.y;
+                var dx2L = (long)dx * dx;
+                var dy2L = (long)dy * dy;
+                return (dx2L * ry2L) + (dy2L * rx2L) <= rx2L * ry2L;
+            }
+
             var rx2 = (BigInteger)radii.x * radii.x;
             var ry2 = (BigInteger)radii.y * radii.y;
             var dx2 = (BigInteger)dx * dx;
@@ -213,9 +222,40 @@ namespace BovineLabs.Timeline.Grid.Influence.Tests
             return dx * dx + dy * dy <= (long)r * r;
         }
 
+        /// <summary>Inputs small enough that all capsule/ellipse intermediates fit in a long (max product 2^62).</summary>
+        private static bool FitsFastPath(int2 a, int2 b, int radius, int2 p)
+        {
+            const int limit = 1 << 14;
+            return math.all(math.abs(a) < limit) && math.all(math.abs(b) < limit) &&
+                   math.all(math.abs(p) < limit) && radius < limit;
+        }
+
         internal static bool CapsuleContains(int2 a, int2 b, int radius, int2 p)
         {
             if (radius < 0) return false;
+
+            // Fast long-arithmetic path for typical fuzz-scale inputs; BigInteger is
+            // retained below for adversarial extreme-coordinate scenes where the
+            // intermediate products overflow 64 bits.
+            if (FitsFastPath(a, b, radius, p))
+            {
+                long abxL = b.x - a.x, abyL = b.y - a.y;
+                long apxL = p.x - a.x, apyL = p.y - a.y;
+                var axisL = (abxL * abxL) + (abyL * abyL);
+                var radiusL = (long)radius * radius;
+                var projL = (apxL * abxL) + (apyL * abyL);
+                var distL = (apxL * apxL) + (apyL * apyL);
+
+                if (axisL == 0 || projL <= 0) return distL <= radiusL;
+
+                if (projL >= axisL)
+                {
+                    long bpxL = p.x - b.x, bpyL = p.y - b.y;
+                    return (bpxL * bpxL) + (bpyL * bpyL) <= radiusL;
+                }
+
+                return (distL * axisL) - (projL * projL) <= radiusL * axisL;
+            }
 
             var abx = (BigInteger)b.x - a.x;
             var aby = (BigInteger)b.y - a.y;

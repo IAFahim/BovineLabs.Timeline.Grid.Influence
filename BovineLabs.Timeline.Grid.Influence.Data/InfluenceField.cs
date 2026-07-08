@@ -23,6 +23,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
         private NativeList<int2> _coordBySlot;
         private NativeList<uint> _lastWrittenBySlot;
         private NativeList<byte> _nonZeroBySlot;
+        private NativeList<uint> _preparedBySlot;
         private NativeList<int> _freeSlots;
         private NativeList<int> _activeSlots;
         private NativeList<int> _data;
@@ -42,6 +43,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         private bool _hasPendingTick;
         private uint _pendingTick;
+        private uint _scheduleVersion;
 
         private GridSpec _spec;
         private JobHandle _dependency;
@@ -61,6 +63,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 _coordBySlot = new NativeList<int2>(64, allocator),
                 _lastWrittenBySlot = new NativeList<uint>(64, allocator),
                 _nonZeroBySlot = new NativeList<byte>(64, allocator),
+                _preparedBySlot = new NativeList<uint>(64, allocator),
                 _freeSlots = new NativeList<int>(64, allocator),
                 _activeSlots = new NativeList<int>(64, allocator),
                 _data = new NativeList<int>(64 * spec.ElementsPerChunk, allocator),
@@ -210,6 +213,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 HasStencil = stencil.IsActive,
                 StencilData = stencil.Data,
                 StencilSlotByCoord = stencil.SlotByCoord,
+                StencilLastWrittenBySlot = stencil.LastWrittenBySlot,
+                StencilFrameId = stencil.FrameId,
                 DecayPerMille = stencil.DecayPerMille,
                 SpreadDenominator = stencil.SpreadDenominator
             }.Schedule(_activeSlots, 1, scatter);
@@ -220,8 +225,27 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         private PrepareSlotsHelper NewHelper(in StencilConfig stencil)
         {
-            var resetFrame = FrameId == uint.MaxValue;
-            FrameId = resetFrame ? 1u : FrameId + 1u;
+            bool resetFrame;
+            if (_hasPendingTick)
+            {
+                _hasPendingTick = false;
+                var tick = _pendingTick == 0u ? 1u : _pendingTick;
+                resetFrame = tick < FrameId;
+                FrameId = tick;
+            }
+            else
+            {
+                resetFrame = FrameId == uint.MaxValue;
+                FrameId = resetFrame ? 1u : FrameId + 1u;
+            }
+
+            // Monotonic per-Schedule version used by Activate to dedupe ActiveSlots membership.
+            // Distinct from FrameId: multiple Schedule calls may legitimately share one tick.
+            // 0 is reserved as "never prepared" for fresh slots; skip it on wrap. (After a wrap a
+            // slot untouched for exactly 2^32 schedules could be skipped once — self-corrects on
+            // the next schedule.)
+            _scheduleVersion++;
+            if (_scheduleVersion == 0u) _scheduleVersion = 1u;
 
             return new PrepareSlotsHelper
             {
@@ -233,10 +257,13 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 CoordBySlot = _coordBySlot,
                 LastWrittenBySlot = _lastWrittenBySlot,
                 NonZeroBySlot = _nonZeroBySlot,
+                PreparedBySlot = _preparedBySlot,
                 ActiveSlots = _activeSlots,
                 Data = _data,
+                Stats = _stats,
                 Spec = _spec,
                 FrameId = FrameId,
+                ScheduleVersion = _scheduleVersion,
                 ResetFrame = resetFrame,
                 RetentionFrames = _spec.RetentionFrames,
                 HasStencil = stencil.IsActive,
@@ -244,6 +271,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 StencilCoordBySlot = stencil.CoordBySlot,
                 StencilData = stencil.Data,
                 StencilNonZeroBySlot = stencil.NonZeroBySlot,
+                StencilLastWrittenBySlot = stencil.LastWrittenBySlot,
+                StencilFrameId = stencil.FrameId,
                 DecayPerMille = stencil.DecayPerMille,
                 SpreadDenominator = stencil.SpreadDenominator
             };
@@ -258,6 +287,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             stencil.CoordBySlot = _emptyCoords;
             stencil.Data = _emptyInts;
             stencil.NonZeroBySlot = _emptyBytes;
+            stencil.LastWrittenBySlot = _emptyUints;
+            stencil.FrameId = 0u;
         }
 
         public void Dispose()
@@ -268,6 +299,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             _coordBySlot.Dispose();
             _lastWrittenBySlot.Dispose();
             _nonZeroBySlot.Dispose();
+            _preparedBySlot.Dispose();
             _freeSlots.Dispose();
             _activeSlots.Dispose();
             _data.Dispose();
@@ -279,6 +311,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             _emptyInts.Dispose();
             _emptyCoords.Dispose();
             _emptyBytes.Dispose();
+            _emptyUints.Dispose();
+            _stats.Dispose();
             this = default;
         }
 
@@ -290,6 +324,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             handle = _coordBySlot.Dispose(handle);
             handle = _lastWrittenBySlot.Dispose(handle);
             handle = _nonZeroBySlot.Dispose(handle);
+            handle = _preparedBySlot.Dispose(handle);
             handle = _freeSlots.Dispose(handle);
             handle = _activeSlots.Dispose(handle);
             handle = _data.Dispose(handle);
@@ -301,6 +336,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             handle = _emptyInts.Dispose(handle);
             handle = _emptyCoords.Dispose(handle);
             handle = _emptyBytes.Dispose(handle);
+            handle = _emptyUints.Dispose(handle);
+            handle = _stats.Dispose(handle);
             this = default;
             return handle;
         }
@@ -407,6 +444,8 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
             public bool HasStencil;
             [ReadOnly] public NativeArray<int> StencilData;
             public NativeFlatMap.ReadOnly StencilSlotByCoord;
+            [ReadOnly] public NativeArray<uint> StencilLastWrittenBySlot;
+            public uint StencilFrameId;
             public int DecayPerMille;
             public int SpreadDenominator;
 
@@ -446,7 +485,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 var outflowHalo = new NativeArray<int>(haloStride * haloStride, Allocator.Temp);
                 var halo = (int*)outflowHalo.GetUnsafePtr();
 
-                if (StencilSlotByCoord.TryGetValue(coord, out var selfSlot))
+                if (StencilSlotByCoord.TryGetValue(coord, out var selfSlot) && IsStencilFresh(selfSlot))
                 {
                     var self = (int*)StencilData.GetUnsafeReadOnlyPtr() + selfSlot * Spec.ElementsPerChunk;
                     for (var y = 0; y < chunkSize; y++)
@@ -482,9 +521,15 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 outflowHalo.Dispose();
             }
 
+            private bool IsStencilFresh(int slot)
+            {
+                return (uint)slot < (uint)StencilLastWrittenBySlot.Length &&
+                       StencilLastWrittenBySlot[slot] == StencilFrameId;
+            }
+
             private void FillHaloColumn(int2 coord, int sourceX, int haloX, int* halo, int haloStride)
             {
-                if (!StencilSlotByCoord.TryGetValue(coord, out var slot)) return;
+                if (!StencilSlotByCoord.TryGetValue(coord, out var slot) || !IsStencilFresh(slot)) return;
 
                 var source = (int*)StencilData.GetUnsafeReadOnlyPtr() + slot * Spec.ElementsPerChunk;
                 for (var y = 0; y < Spec.ChunkSize; y++)
@@ -494,7 +539,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
             private void FillHaloRow(int2 coord, int sourceY, int haloY, int* halo, int haloStride)
             {
-                if (!StencilSlotByCoord.TryGetValue(coord, out var slot)) return;
+                if (!StencilSlotByCoord.TryGetValue(coord, out var slot) || !IsStencilFresh(slot)) return;
 
                 var source = (int*)StencilData.GetUnsafeReadOnlyPtr() + slot * Spec.ElementsPerChunk +
                              sourceY * Spec.Stride;

@@ -104,7 +104,9 @@ namespace BovineLabs.Timeline.Grid.Influence.Editor
                         ? Color.Lerp(new Color(0.2f, 0.18f, 0.1f), new Color(1f, 0.65f, 0.2f), intensity)
                         : Color.Lerp(new Color(0.1f, 0.14f, 0.2f), new Color(0.3f, 0.6f, 1f), intensity);
 
-                preview.SetPixel(x, size.y - 1 - y, color);
+                // TODO-25 orientation: data row y (world +y) -> texel row y so the preview renders world +y up,
+                // matching the scene gizmo and the stamp editor.
+                preview.SetPixel(x, y, color);
             }
 
             preview.Apply();

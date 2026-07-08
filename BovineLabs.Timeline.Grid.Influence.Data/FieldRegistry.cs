@@ -102,7 +102,24 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
 
         public FlowField Flow;
 
-        public InfluenceField.StencilConfig PendingStencil;
+        /// <summary>Game-tick counter shared across both physical buffers so retention and compaction
+        /// cadence are measured in game frames regardless of double-buffering (see TODO-13). Incremented
+        /// once per FieldTickSystem update and passed to whichever buffer is scheduled.</summary>
+        public uint Tick;
+
+        /// <summary>Debug-only latch: set once the field has warned about dropped stamps so the warn-once
+        /// in FieldTickSystem does not repeat every frame.</summary>
+        public byte DropWarned;
+
+        /// <summary>
+        /// Cross-system write barrier for readers/writers that touch this field's data OUTSIDE the
+        /// FieldTickSystem pump. Contract: any system that schedules a job against a field's native
+        /// containers must combine its handle into <see cref="WriterDependency"/> so the next tick chains
+        /// after it. NOTE: this field is currently combined/completed/cleared but never assigned by any
+        /// producer — every existing consumer instead orders itself by taking RW access on
+        /// <see cref="FieldRegistrySingleton"/>. It is retained as the documented seam for a future explicit
+        /// AcquireReader/PublishRead API (TODO-10); until a producer assigns it, it is effectively dead.
+        /// </summary>
         public JobHandle WriterDependency;
 
         public void Swap()

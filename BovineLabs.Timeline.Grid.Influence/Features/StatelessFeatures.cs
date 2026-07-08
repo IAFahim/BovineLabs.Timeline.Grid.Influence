@@ -9,6 +9,14 @@ namespace BovineLabs.Timeline.Grid.Influence.Features
         public FieldId Id;
     }
 
+    /// <summary>
+    /// Example read-side helpers over a <see cref="FieldRegistry"/> (Territory / Vision / Capture / Flow /
+    /// Placement). CONTRACT for every reader in this file: they call <c>AsReader()</c> and sample field data
+    /// directly, so they are only safe on the MAIN THREAD and only AFTER the target field's job chain has
+    /// completed (<c>r.Front(id).Complete()</c> or a system that has ordered itself behind the tick pump via
+    /// RW access on <see cref="FieldRegistrySingleton"/>). They never schedule jobs and never mutate the
+    /// field; reads always observe the previous tick's resolved values (one-frame latency).
+    /// </summary>
     public static class TerritoryReader
     {
         public static int Controller(ref FieldRegistry r, FieldId id, int2 cell)

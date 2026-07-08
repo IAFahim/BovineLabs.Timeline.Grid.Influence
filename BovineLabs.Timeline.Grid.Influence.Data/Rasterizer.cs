@@ -487,7 +487,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 {
                     var centerY = bottomBand ? bottomCenter : topCenter;
                     var dy = y - centerY;
-                    var half = IntegerMath.FloorSqrt(r2 - (long)dy * dy);
+                    var half = (int)IntegerMath.FloorSqrt(r2 - (long)dy * dy); // <= r, fits int
 
                     x0 = leftCenter - half;
                     x1 = rightCenter + half + 1;
@@ -510,7 +510,7 @@ namespace BovineLabs.Timeline.Grid.Influence.Data
                 var rem = r2 - (long)dy * dy;
                 if (rem < 0) continue;
 
-                var half = IntegerMath.FloorSqrt(rem);
+                var half = (int)IntegerMath.FloorSqrt(rem); // <= radius, fits int
                 var xlo = -half;
                 var xhi = half;
 

@@ -1,6 +1,7 @@
+using BovineLabs.Core.Editor.Asset;
 using System.Collections.Generic;
 using BovineLabs.Core.Editor.Inspectors;
-using BovineLabs.Core.Editor.ObjectManagement;
+using BovineLabs.Nerve.Editor.ObjectManagement;
 using BovineLabs.Timeline.Grid.Influence.Authoring;
 using UnityEditor;
 using UnityEngine.UIElements;

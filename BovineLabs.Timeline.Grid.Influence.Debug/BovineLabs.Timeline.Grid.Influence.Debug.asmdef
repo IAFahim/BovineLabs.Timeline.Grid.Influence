@@ -1,34 +1,35 @@
 {
-  "name": "BovineLabs.Timeline.Grid.Influence.Debug",
-  "rootNamespace": "",
-  "references": [
-    "BovineLabs.Timeline.Grid.Influence.Data",
-    "BovineLabs.Quill",
-    "BovineLabs.Core",
-    "BovineLabs.Timeline.Core.Debug",
-    "BovineLabs.Timeline.Data",
-    "Unity.Burst",
-    "Unity.Collections",
-    "Unity.Entities",
-    "Unity.Mathematics",
-    "Unity.Mathematics.Extensions",
-    "Unity.Transforms",
-    "Unity.Jobs",
-    "BovineLabs.Reaction.Data",
-    "BovineLabs.Timeline.EntityLinks",
-    "BovineLabs.Timeline.EntityLinks.Data"
-  ],
-  "includePlatforms": [
-    "Editor"
-  ],
-  "excludePlatforms": [],
-  "allowUnsafeCode": true,
-  "overrideReferences": false,
-  "precompiledReferences": [],
-  "autoReferenced": false,
-  "defineConstraints": [
-    "UNITY_EDITOR || BL_DEBUG"
-  ],
-  "versionDefines": [],
-  "noEngineReferences": false
+    "name": "BovineLabs.Timeline.Grid.Influence.Debug",
+    "rootNamespace": "",
+    "references": [
+        "BovineLabs.Timeline.Grid.Influence.Data",
+        "BovineLabs.Quill",
+        "BovineLabs.Core",
+        "BovineLabs.Timeline.Core.Debug",
+        "BovineLabs.Timeline.Data",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Mathematics",
+        "Unity.Mathematics.Extensions",
+        "Unity.Transforms",
+        "Unity.Jobs",
+        "BovineLabs.Reaction.Data",
+        "BovineLabs.Timeline.EntityLinks",
+        "BovineLabs.Timeline.EntityLinks.Data",
+        "BovineLabs.Nerve"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_EDITOR || BL_DEBUG"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
 }

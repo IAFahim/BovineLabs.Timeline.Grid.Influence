@@ -24,7 +24,9 @@
         "Unity.Timeline",
         "Unity.Transforms",
         "Unity.TextMeshPro",
-        "UnityEngine.UI"
+        "UnityEngine.UI",
+        "BovineLabs.Nerve.Authoring",
+        "BovineLabs.Nerve"
     ],
     "includePlatforms": [
         "Editor"

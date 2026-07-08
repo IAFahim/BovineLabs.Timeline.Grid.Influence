@@ -12,7 +12,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.Timeline;
 using TargetSlot = BovineLabs.Reaction.Data.Core.Target;
 using TargetsAuthoring = BovineLabs.Reaction.Authoring.Core.TargetsAuthoring;
-using LifeCycleAuthoring = BovineLabs.Core.Authoring.LifeCycle.LifeCycleAuthoring;
+using LifeCycleAuthoring = BovineLabs.Nerve.Authoring.LifeCycle.LifeCycleAuthoring;
 using LinearPIDTrack = BovineLabs.Timeline.Physics.Authoring.PIDs.PhysicsLinearPIDTrack;
 using LinearPIDClip = BovineLabs.Timeline.Physics.Authoring.PIDs.PhysicsLinearPIDClip;
 using LinearMode = BovineLabs.Timeline.Physics.PidLinearTargetMode;

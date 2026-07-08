@@ -1,3 +1,4 @@
+using BovineLabs.Core.Asset;
 using System;
 using System.Collections.Generic;
 using TMPro;
@@ -10,7 +11,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.Timeline;
 using TargetsAuthoring = BovineLabs.Reaction.Authoring.Core.TargetsAuthoring;
 using TargetSlot = BovineLabs.Reaction.Data.Core.Target;
-using LifeCycleAuthoring = BovineLabs.Core.Authoring.LifeCycle.LifeCycleAuthoring;
+using LifeCycleAuthoring = BovineLabs.Nerve.Authoring.LifeCycle.LifeCycleAuthoring;
 using TimelineBeginAuthoring = BovineLabs.Timeline.Core.Authoring.TimelineBeginAuthoring;
 using TimelineBeginMode = BovineLabs.Timeline.Core.Authoring.TimelineBeginMode;
 using PositionTrack = BovineLabs.Timeline.Transform.Authoring.TransformPositionTrack;
